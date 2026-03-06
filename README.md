@@ -1,11 +1,11 @@
 # sorcy
 
-`sorcy` is a small CLI that reads Python dependencies from `pyproject.toml`, looks up their source repository metadata from PyPI, and writes a Markdown report with GitHub repo pointers.
+`sorcy` is a small CLI that reads Python dependencies from `pyproject.toml`, looks up their source repository metadata from PyPI, and writes a Markdown report with forge repository pointers.
 
 ## Why this exists
 
 Coding agents and humans often need quick links to the actual source code of dependencies.  
-Package manager output is useful, but it usually does not directly produce a clean Markdown list of GitHub org/repo targets for downstream tools.
+Package manager output is useful, but it usually does not directly produce a clean Markdown list of repository targets for downstream tools.
 
 ## MVP scope (current)
 
@@ -17,6 +17,7 @@ Package manager output is useful, but it usually does not directly produce a cle
   - Poetry fallback sections (`[tool.poetry.dependencies]` and poetry groups)
 - Resolver: PyPI JSON API metadata (`project_urls`, `home_page`, `project_url`)
 - Output: Markdown table (`sorcy-dependencies.md` by default)
+- Forge support: GitHub, GitLab, Bitbucket, Codeberg, SourceHut (`git.sr.ht`), plus easy extension for new forges
 
 ## Install (local dev)
 
@@ -55,10 +56,10 @@ python3 -m sorcy . --no-groups
 The report is Markdown and includes:
 
 - dependency name
-- GitHub `org/repo` (if found)
+- source repo as `host/path` (if found)
 - clickable source URL
 
-Dependencies with no GitHub metadata are marked as `_not found_`.
+Dependencies with no usable source metadata are marked as `_not found_`.
 
 ## Reliability and security notes
 
@@ -75,9 +76,16 @@ python3 -m unittest discover -s tests -v
 
 ## About uv / linters
 
-- `uv` is great for resolution/lock/install workflows, but it does not currently provide this exact Markdown GitHub source report out of the box.
+- `uv` is great for resolution/lock/install workflows, but it does not currently provide this exact Markdown source repo report out of the box.
 - Linters are focused on code quality/style/static checks, not dependency source repo mapping.
 - `sorcy` is intended to fill that narrow gap cleanly.
+
+## Project values
+
+- Forge-neutral by default. We support multiple forges and avoid hard-coding one vendor as "the only source of truth."
+- Fast support for new forge hosts. Add host rules in `src/sorcy/source_resolver.py` so community migration can be supported quickly.
+- Prefer open packaging metadata (PyPI JSON) as the primary signal.
+- Contribution workflow and policy: see `CONTRIBUTING.md`.
 
 ## Roadmap
 
