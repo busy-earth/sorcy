@@ -47,6 +47,35 @@ class SorcyCliTests(unittest.TestCase):
         self.assertEqual(repo, "psf/requests")
         self.assertEqual(url, "https://github.com/psf/requests")
 
+    def test_resolve_github_repo_prefers_repository_labels(self) -> None:
+        def fake_fetcher(_: str) -> dict:
+            return {
+                "info": {
+                    "project_urls": {
+                        "Documentation": "https://requests.readthedocs.io",
+                        "Repository": "https://github.com/psf/requests",
+                    }
+                }
+            }
+
+        repo, url = cli.resolve_github_repo("requests", fetcher=fake_fetcher)
+        self.assertEqual(repo, "psf/requests")
+        self.assertEqual(url, "https://github.com/psf/requests")
+
+    def test_resolve_github_repo_skips_pypi_project_url(self) -> None:
+        def fake_fetcher(_: str) -> dict:
+            return {
+                "info": {
+                    "project_urls": {"Homepage": "https://example.com"},
+                    "home_page": "https://docs.example.com",
+                    "project_url": "https://pypi.org/project/requests/",
+                }
+            }
+
+        repo, url = cli.resolve_github_repo("requests", fetcher=fake_fetcher)
+        self.assertIsNone(repo)
+        self.assertIsNone(url)
+
     def test_run_writes_markdown(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
