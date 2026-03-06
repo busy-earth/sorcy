@@ -13,5 +13,6 @@ This is a Python project ("sorcy") in its initial state — only a README, LICEN
 
 ### Running / Testing
 
-- There is currently no application to run, no tests to execute, and no linter configured.
-- When code is added, update this section with lint/test/build/run commands.
+- Install locally: `python3 -m pip install -e .`
+- Run CLI: `python3 -m sorcy .`
+- Run tests: `python3 -m unittest discover -s tests -v`
