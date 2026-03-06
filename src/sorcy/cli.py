@@ -15,6 +15,8 @@ import tomllib
 
 _NAME_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
 _GITHUB_RE = re.compile(r"github\.com[:/]+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)", re.IGNORECASE)
+_PREFERRED_URL_LABEL_RE = re.compile(r"(source|repository|repo|code|github)", re.IGNORECASE)
+_PYPI_PROJECT_URL_RE = re.compile(r"^https?://pypi\.org/project/[^/]+/?$", re.IGNORECASE)
 @dataclass(frozen=True)
 class ReportRow:
     dependency: str
@@ -96,6 +98,37 @@ def extract_github_repo(candidate_url: str) -> str | None:
         repo = repo[:-4]
     return repo if "/" in repo else None
 
+def _project_url_candidates(info: dict[str, Any]) -> list[str]:
+    preferred: list[str] = []
+    fallback: list[str] = []
+    seen: set[str] = set()
+
+    project_urls = info.get("project_urls", {})
+    if isinstance(project_urls, dict):
+        for label, url in project_urls.items():
+            if not isinstance(url, str):
+                continue
+            cleaned = url.strip()
+            if not cleaned or _PYPI_PROJECT_URL_RE.match(cleaned) or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            if isinstance(label, str) and _PREFERRED_URL_LABEL_RE.search(label):
+                preferred.append(cleaned)
+            else:
+                fallback.append(cleaned)
+
+    for key in ("home_page", "project_url"):
+        value = info.get(key)
+        if not isinstance(value, str):
+            continue
+        cleaned = value.strip()
+        if not cleaned or _PYPI_PROJECT_URL_RE.match(cleaned) or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        fallback.append(cleaned)
+
+    return [*preferred, *fallback]
+
 def fetch_pypi_json(package_name: str, timeout: int = 8) -> dict[str, Any] | None:
     request = Request(f"https://pypi.org/pypi/{package_name}/json", headers={"User-Agent": "sorcy/0.1"})
     try:
@@ -116,16 +149,7 @@ def resolve_github_repo(
         return None, None
 
     info = payload.get("info", {})
-    candidates: list[str] = []
-    project_urls = info.get("project_urls", {})
-    if isinstance(project_urls, dict):
-        candidates.extend(url for url in project_urls.values() if isinstance(url, str))
-    for key in ("home_page", "project_url"):
-        value = info.get(key)
-        if isinstance(value, str):
-            candidates.append(value)
-
-    for candidate in candidates:
+    for candidate in _project_url_candidates(info):
         repo = extract_github_repo(candidate)
         if repo:
             return repo, f"https://github.com/{repo}"
