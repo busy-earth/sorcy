@@ -14,6 +14,7 @@ Thanks for helping improve `sorcy`.
 - `src/scan.rs`: manifest discovery
 - `src/parse/*`: per-ecosystem manifest readers (via `ManifestParser` trait)
 - `src/resolve.rs`: source URL resolution (via `SourceResolver` trait)
+- `src/settings.rs`: settings resolution (`CLI > env > defaults`)
 - `src/lib.rs`: end-to-end orchestration
 - `src/cli.rs`: CLI behavior
 - `tests/integration_mvp.rs`: end-to-end tests
