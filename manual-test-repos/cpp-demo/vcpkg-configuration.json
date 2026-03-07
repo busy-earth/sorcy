@@ -1,0 +1,14 @@
+{
+  "registries": [
+    {
+      "kind": "git",
+      "repository": "https://github.com/fmtlib/fmt",
+      "packages": ["fmt"]
+    },
+    {
+      "kind": "git",
+      "repository": "git@github.com:gabime/spdlog.git",
+      "packages": ["spdlog"]
+    }
+  ]
+}
