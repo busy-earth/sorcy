@@ -50,6 +50,7 @@ pub fn parse_dependencies(manifests: &[ManifestFile]) -> Result<Vec<ParsedDepend
                 output.push(ParsedDependency {
                     dependency: dep,
                     manifest_path: manifest.path.clone(),
+                    manifest_kind: manifest.kind,
                 });
             }
         }

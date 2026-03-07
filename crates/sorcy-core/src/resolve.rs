@@ -39,6 +39,7 @@ const FORGE_PATH_CUT_MARKERS: &[&str] = &[
     "/releases/",
     "/wiki/",
 ];
+
 #[derive(Debug, Clone)]
 pub struct RegistryConfig {
     pub pypi_base_url: String,
