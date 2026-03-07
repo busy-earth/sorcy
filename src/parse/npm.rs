@@ -1,7 +1,24 @@
 use anyhow::Result;
 use serde_json::Value;
 
-use crate::model::{DependencyRef, Ecosystem};
+use crate::model::{DependencyRef, Ecosystem, ManifestKind};
+
+use super::ManifestParser;
+
+pub struct NpmParser;
+
+impl ManifestParser for NpmParser {
+    fn supports(&self, kind: ManifestKind) -> bool {
+        matches!(kind, ManifestKind::PackageJson)
+    }
+
+    fn parse(&self, kind: ManifestKind, content: &str) -> Result<Vec<DependencyRef>> {
+        match kind {
+            ManifestKind::PackageJson => parse_package_json(content),
+            _ => Ok(Vec::new()),
+        }
+    }
+}
 
 const NPM_DEP_SECTIONS: &[&str] = &[
     "dependencies",

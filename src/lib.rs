@@ -9,13 +9,17 @@ use std::path::Path;
 use anyhow::Result;
 use model::SourceRecord;
 use parse::parse_dependencies;
-use resolve::{RegistryConfig, RegistryResolver};
+use resolve::{RegistryConfig, RegistryResolver, SourceResolver};
 use scan::discover_manifests;
 
 pub fn run_with_config(root: &Path, config: RegistryConfig) -> Result<Vec<SourceRecord>> {
+    let resolver = RegistryResolver::new(config)?;
+    run_with_resolver(root, &resolver)
+}
+
+pub fn run_with_resolver(root: &Path, resolver: &impl SourceResolver) -> Result<Vec<SourceRecord>> {
     let manifests = discover_manifests(root)?;
     let dependencies = parse_dependencies(&manifests)?;
-    let resolver = RegistryResolver::new(config)?;
 
     let mut records = Vec::new();
     for item in dependencies {

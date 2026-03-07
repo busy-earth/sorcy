@@ -1,7 +1,28 @@
 use anyhow::Result;
 use toml::Value;
 
-use crate::model::{DependencyRef, Ecosystem};
+use crate::model::{DependencyRef, Ecosystem, ManifestKind};
+
+use super::ManifestParser;
+
+pub struct PythonParser;
+
+impl ManifestParser for PythonParser {
+    fn supports(&self, kind: ManifestKind) -> bool {
+        matches!(
+            kind,
+            ManifestKind::PyProjectToml | ManifestKind::RequirementsTxt
+        )
+    }
+
+    fn parse(&self, kind: ManifestKind, content: &str) -> Result<Vec<DependencyRef>> {
+        match kind {
+            ManifestKind::PyProjectToml => parse_pyproject_toml(content),
+            ManifestKind::RequirementsTxt => parse_requirements_txt(content),
+            _ => Ok(Vec::new()),
+        }
+    }
+}
 
 pub fn parse_pyproject_toml(content: &str) -> Result<Vec<DependencyRef>> {
     let data: Value = toml::from_str(content)?;

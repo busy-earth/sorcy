@@ -12,8 +12,8 @@ Thanks for helping improve `sorcy`.
 ## Project structure
 
 - `src/scan.rs`: manifest discovery
-- `src/parse/*`: per-ecosystem manifest readers
-- `src/resolve.rs`: source URL resolution
+- `src/parse/*`: per-ecosystem manifest readers (via `ManifestParser` trait)
+- `src/resolve.rs`: source URL resolution (via `SourceResolver` trait)
 - `src/lib.rs`: end-to-end orchestration
 - `src/cli.rs`: CLI behavior
 - `tests/integration_mvp.rs`: end-to-end tests
@@ -29,6 +29,12 @@ When adding a forge:
 3. Add unit tests in `src/resolve.rs`.
 4. Add an integration test path in `tests/integration_mvp.rs` if behavior changes end-to-end.
 5. Keep existing output record shape stable.
+
+## Installer scripts
+
+- `install.sh` and `install.ps1` provide one-command installation for MVP usage.
+- Keep them simple, auditable, and shell-safe.
+- If behavior changes, update README install examples in the same PR.
 
 ## Running tests
 
