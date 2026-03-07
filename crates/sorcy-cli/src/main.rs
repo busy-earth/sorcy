@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use sorcy_core::repo::RepoUpdateStrategy;
-use sorcy_core::resolve::RegistryConfig;
 use sorcy_core::settings::{Settings, SettingsOverrides};
 
 #[derive(Debug, Parser)]
@@ -89,11 +88,9 @@ fn run_cli(args: Args) -> Result<()> {
             .repo_update_strategy
             .map(CliRepoUpdateStrategy::into_core),
     })?;
+    let config = sorcy_core::SorcyConfig::from_settings(settings);
     let json = if args.materialize {
-        let materialization = sorcy_core::materialize_project_with_config(
-            &args.path,
-            sorcy_core::SorcyConfig::from_settings(settings),
-        )?;
+        let materialization = sorcy_core::materialize_project_with_config(&args.path, config)?;
         if args.materialize_rich {
             if args.pretty {
                 serde_json::to_string_pretty(&materialization)?
@@ -109,15 +106,7 @@ fn run_cli(args: Args) -> Result<()> {
             }
         }
     } else {
-        let config = RegistryConfig {
-            pypi_base_url: settings.registry.pypi_base_url,
-            npm_base_url: settings.registry.npm_base_url,
-            crates_base_url: settings.registry.crates_base_url,
-            http_timeout_seconds: settings.http.timeout_seconds,
-            http_retries: settings.http.retries,
-            http_retry_backoff_ms: settings.http.retry_backoff_ms,
-        };
-        let records = sorcy_core::run_with_config(&args.path, config)?;
+        let records = sorcy_core::run_with_config(&args.path, config.registry)?;
         if args.pretty {
             serde_json::to_string_pretty(&records)?
         } else {
