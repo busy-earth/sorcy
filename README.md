@@ -1,95 +1,89 @@
 # sorcy
 
-`sorcy` is a small CLI that reads Python dependencies from `pyproject.toml`, looks up their source repository metadata from PyPI, and writes a Markdown report with forge repository pointers.
+`sorcy` is a Rust CLI that scans a repository for dependency manifests and returns
+a single JSON list of:
 
-## Why this exists
+- dependency name
+- source code URL
 
-Coding agents and humans often need quick links to the actual source code of dependencies.  
-Package manager output is useful, but it usually does not directly produce a clean Markdown list of repository targets for downstream tools.
+The MVP is intentionally small and focused.
 
-## MVP scope (current)
+## MVP scope
 
-- Input: `pyproject.toml`
-- Dependencies scanned:
-  - `[project.dependencies]`
-  - `[project.optional-dependencies]` (unless `--no-optional`)
-  - `[dependency-groups]` (unless `--no-groups`)
-  - Poetry fallback sections (`[tool.poetry.dependencies]` and poetry groups)
-- Resolver: PyPI JSON API metadata (`project_urls`, `home_page`, `project_url`)
-- Output: Markdown table (`sorcy-dependencies.md` by default)
-- Forge support: GitHub, GitLab, Bitbucket, Codeberg, SourceHut (`git.sr.ht`), plus easy extension for new forges
+The core has four parts:
 
-## Install (local dev)
+1. **Scanner**: finds dependency files in the current repo.
+2. **Parsers**: reads supported ecosystem formats.
+3. **Normalizer**: converts everything into one record shape.
+4. **Output**: returns final JSON list (`dependency`, `source_url`).
+
+## Supported manifests
+
+`sorcy` currently scans:
+
+- Python:
+  - `pyproject.toml`
+  - `requirements*.txt`
+- npm:
+  - `package.json`
+- Cargo:
+  - `Cargo.toml`
+- C/C++:
+  - `vcpkg.json`
+  - `vcpkg-configuration.json`
+  - `conanfile.txt`
+  - `conanfile.py`
+
+## How source URLs are resolved
+
+- **Python**: reads dependency names from repo manifests and queries PyPI package metadata (`project_urls`, `home_page`, `project_url`).
+- **npm**: reads dependency names from `package.json` and queries npm registry metadata (`repository`, `homepage`).
+- **Cargo**: reads dependency names from `Cargo.toml` and queries crates.io metadata (`repository`, `homepage`).
+- **C/C++**: reads repo-local metadata only. If forge references are directly present (for example in `vcpkg-configuration.json` registries), `sorcy` returns them. It does not clone repos, build graphs, or parse source code in this MVP.
+
+## Build and run
 
 ```bash
-python3 -m pip install -e .
+cargo build
 ```
 
-## Usage
-
-Run in a project directory (or pass a path):
+Scan current directory:
 
 ```bash
-python3 -m sorcy .
+cargo run -- .
 ```
 
-Write to a custom file:
+Pretty JSON:
 
 ```bash
-python3 -m sorcy . -o dependency-sources.md
+cargo run -- . --pretty
 ```
 
-Ignore optional dependencies:
+Write to file:
 
 ```bash
-python3 -m sorcy . --no-optional
-```
-
-Ignore dependency groups:
-
-```bash
-python3 -m sorcy . --no-groups
+cargo run -- . --output sorcy-sources.json --pretty
 ```
 
 ## Output format
 
-The report is Markdown and includes:
+The output is JSON:
 
-- dependency name
-- source repo as `host/path` (if found)
-- clickable source URL
+```json
+[
+  {
+    "dependency": "requests",
+    "source_url": "https://github.com/psf/requests"
+  }
+]
+```
 
-Dependencies with no usable source metadata are marked as `_not found_`.
-
-## Reliability and security notes
-
-- `sorcy` only reads TOML and queries PyPI JSON over HTTPS.
-- It does **not** execute dependency code.
-- Network or metadata issues fail gracefully per dependency when possible.
-- Name parsing normalizes dependency names to reduce duplicates.
+Only dependencies with resolved source URLs are returned.
 
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v
+cargo test
 ```
 
-## About uv / linters
-
-- `uv` is great for resolution/lock/install workflows, but it does not currently provide this exact Markdown source repo report out of the box.
-- Linters are focused on code quality/style/static checks, not dependency source repo mapping.
-- `sorcy` is intended to fill that narrow gap cleanly.
-
-## Project values
-
-- Forge-neutral by default. We support multiple forges and avoid hard-coding one vendor as "the only source of truth."
-- Fast support for new forge hosts. Add host rules in `src/sorcy/source_resolver.py` so community migration can be supported quickly.
-- Prefer open packaging metadata (PyPI JSON) as the primary signal.
-- Contribution workflow and policy: see `CONTRIBUTING.md`.
-
-## Roadmap
-
-1. Add import scanning as an optional signal.
-2. Expand to other language ecosystems.
-3. Add transitive dependency source mapping.
-4. Add machine-readable output mode (JSON) alongside Markdown.
+The integration tests include a full loop against a temporary test repo and mocked registry metadata.
