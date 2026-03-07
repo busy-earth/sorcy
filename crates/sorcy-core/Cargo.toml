@@ -1,0 +1,18 @@
+[package]
+name = "sorcy-core"
+version = "0.2.0"
+edition = "2021"
+description = "Core scanning and source resolution engine for sorcy."
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+regex = "1"
+reqwest = { version = "=0.11.27", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "=3.10.1"

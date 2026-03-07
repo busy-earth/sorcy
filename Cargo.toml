@@ -1,19 +1,4 @@
-[package]
-name = "sorcy"
-version = "0.2.0"
-edition = "2021"
-description = "Scan dependency manifests and output dependency source URLs."
-license = "MIT"
-
-[dependencies]
-anyhow = "1"
-clap = { version = "4", features = ["derive"] }
-regex = "1"
-reqwest = { version = "=0.11.27", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-toml = "0.8"
-walkdir = "2"
-
-[dev-dependencies]
-tempfile = "=3.10.1"
+[workspace]
+resolver = "2"
+members = ["crates/sorcy-core", "crates/sorcy-cli"]
+default-members = ["crates/sorcy-cli"]

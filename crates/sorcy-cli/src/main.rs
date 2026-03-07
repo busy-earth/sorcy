@@ -3,46 +3,52 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-
-use crate::resolve::RegistryConfig;
-use crate::run_with_config;
-use crate::settings::{Settings, SettingsOverrides};
+use sorcy_core::resolve::RegistryConfig;
+use sorcy_core::settings::{Settings, SettingsOverrides};
 
 #[derive(Debug, Parser)]
 #[command(
     name = "sorcy",
     about = "Scan dependency files and output dependency source URLs."
 )]
-pub struct Args {
+struct Args {
     #[arg(default_value = ".")]
-    pub path: PathBuf,
+    path: PathBuf,
 
     #[arg(short, long)]
-    pub output: Option<PathBuf>,
+    output: Option<PathBuf>,
 
     #[arg(long)]
-    pub pretty: bool,
+    pretty: bool,
 
     #[arg(long)]
-    pub pypi_base_url: Option<String>,
+    pypi_base_url: Option<String>,
 
     #[arg(long)]
-    pub npm_base_url: Option<String>,
+    npm_base_url: Option<String>,
 
     #[arg(long)]
-    pub crates_base_url: Option<String>,
+    crates_base_url: Option<String>,
 
     #[arg(long)]
-    pub http_timeout_seconds: Option<u64>,
+    http_timeout_seconds: Option<u64>,
 
     #[arg(long)]
-    pub http_retries: Option<usize>,
+    http_retries: Option<usize>,
 
     #[arg(long)]
-    pub http_retry_backoff_ms: Option<u64>,
+    http_retry_backoff_ms: Option<u64>,
 }
 
-pub fn run_cli(args: Args) -> Result<()> {
+fn main() {
+    let args = Args::parse();
+    if let Err(err) = run_cli(args) {
+        eprintln!("Error: {err}");
+        std::process::exit(1);
+    }
+}
+
+fn run_cli(args: Args) -> Result<()> {
     let settings = Settings::resolve(SettingsOverrides {
         pypi_base_url: args.pypi_base_url,
         npm_base_url: args.npm_base_url,
@@ -60,7 +66,7 @@ pub fn run_cli(args: Args) -> Result<()> {
         http_retries: settings.http.retries,
         http_retry_backoff_ms: settings.http.retry_backoff_ms,
     };
-    let records = run_with_config(&args.path, config)?;
+    let records = sorcy_core::run_with_config(&args.path, config)?;
 
     let json = if args.pretty {
         serde_json::to_string_pretty(&records)?

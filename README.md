@@ -1,17 +1,34 @@
 # sorcy
 
-`sorcy` is a Rust CLI that scans a repository for dependency manifests and returns
-a single JSON list of:
+`sorcy` is a Rust CLI that scans a repository for dependency manifests and outputs
+JSON records with:
 
 - dependency name
-- source code URL
+- source repository URL
 
-The MVP is intentionally small and focused.
+The MVP stays intentionally small and stable.
+
+## Workspace layout
+
+`sorcy` is now a 2-crate Cargo workspace:
+
+- `crates/sorcy-core`: scanning, parsing, resolving, normalization, and provenance-rich models.
+- `crates/sorcy-cli`: thin CLI wrapper (`sorcy` binary).
+
+The CLI output shape is unchanged:
+
+```json
+[
+  {
+    "dependency": "requests",
+    "source_url": "https://github.com/psf/requests"
+  }
+]
+```
+
+Only dependencies with resolved source URLs are emitted in this compatibility JSON output.
 
 ## Install (quick)
-
-`sorcy` now includes a simple installer flow similar to uv's one-command style,
-adapted for this MVP.
 
 macOS / Linux:
 
@@ -27,36 +44,29 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/bus
 
 Notes:
 
-- This installer uses `cargo install --git ...` under the hood.
-- You need Rust/Cargo installed first.
+- Installer uses `cargo install --git ... --package sorcy`.
+- Rust/Cargo must already be installed.
 - Optional env vars:
   - `SORCY_VERSION` (install a specific git tag)
   - `SORCY_REPO_URL` (install from a fork)
 
 ## MVP scope
 
-The core has four parts:
+Current behavior:
 
-1. **Scanner**: finds dependency files in the current repo.
-2. **Parsers**: reads supported ecosystem formats.
-3. **Normalizer**: converts everything into one record shape.
-4. **Output**: returns final JSON list (`dependency`, `source_url`).
+1. Discover dependency manifests in a repo.
+2. Parse dependencies across supported ecosystems.
+3. Resolve source repository URLs from source hints or registry metadata.
+4. Output JSON records (`dependency`, `source_url`).
 
-## Scalable architecture (uv-inspired, right-sized)
+What this step still does **not** do:
 
-To keep growth clean for polyglot support, `sorcy` uses small module boundaries:
-
-- `scan` finds files
-- `parse` contains per-ecosystem parsers behind a shared parser trait
-- `resolve` contains resolvers behind a shared resolver trait
-- `lib` orchestrates scan → parse → resolve → output
-
-This keeps new ecosystems additive: add parser/resolver implementations without
-rewriting core orchestration.
+- clone repositories
+- build dependency graphs
+- parse source files
+- run background services
 
 ## Supported manifests
-
-`sorcy` currently scans:
 
 - Python:
   - `pyproject.toml`
@@ -71,52 +81,56 @@ rewriting core orchestration.
   - `conanfile.txt`
   - `conanfile.py`
 
-## How source URLs are resolved
+## Resolver behavior
 
-- **Python**: reads dependency names from repo manifests and queries PyPI package metadata (`project_urls`, `home_page`, `project_url`).
-- **npm**: reads dependency names from `package.json` and queries npm registry metadata (`repository`, `homepage`).
-- **Cargo**: reads dependency names from `Cargo.toml` and queries crates.io metadata (`repository`, `homepage`).
-- **C/C++**: reads repo-local metadata only. If forge references are directly present (for example in `vcpkg-configuration.json` registries), `sorcy` returns them. It does not clone repos, build graphs, or parse source code in this MVP.
+- Python: PyPI metadata (`project_urls`, `home_page`, `project_url`)
+- npm: npm registry metadata (`repository`, `homepage`)
+- Cargo: crates.io metadata (`repository`, `homepage`)
+- C/C++: local source hints from manifest metadata where present
 
-## Build and run
+URL normalization and retry behavior are preserved.
+
+## Build, run, test
+
+Build all workspace members:
 
 ```bash
-cargo build
+cargo build --workspace
 ```
 
-Scan current directory:
+Run CLI against current directory:
 
 ```bash
-cargo run -- .
+cargo run -p sorcy -- .
 ```
 
 Pretty JSON:
 
 ```bash
-cargo run -- . --pretty
+cargo run -p sorcy -- . --pretty
 ```
 
 Write to file:
 
 ```bash
-cargo run -- . --output sorcy-sources.json --pretty
+cargo run -p sorcy -- . --output sorcy-sources.json --pretty
 ```
 
-Override network behavior from CLI:
+Run tests:
 
 ```bash
-cargo run -- . --http-timeout-seconds 20 --http-retries 5 --http-retry-backoff-ms 200
+cargo test --workspace
 ```
 
-## Settings precedence (uv-style, small)
+## Settings precedence
 
 `sorcy` resolves settings in this order:
 
-1. CLI arguments (highest)
-2. Environment variables
-3. Built-in defaults
+1. CLI arguments
+2. environment variables
+3. defaults
 
-Supported environment variables:
+Environment variables:
 
 - `SORCY_PYPI_BASE_URL`
 - `SORCY_NPM_BASE_URL`
@@ -124,26 +138,3 @@ Supported environment variables:
 - `SORCY_HTTP_TIMEOUT_SECONDS`
 - `SORCY_HTTP_RETRIES`
 - `SORCY_HTTP_RETRY_BACKOFF_MS`
-
-## Output format
-
-The output is JSON:
-
-```json
-[
-  {
-    "dependency": "requests",
-    "source_url": "https://github.com/psf/requests"
-  }
-]
-```
-
-Only dependencies with resolved source URLs are returned.
-
-## Test
-
-```bash
-cargo test
-```
-
-The integration tests include a full loop against a temporary test repo and mocked registry metadata.

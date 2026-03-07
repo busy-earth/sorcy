@@ -6,7 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sorcy::resolve::RegistryConfig;
+use sorcy_core::model::{DependencyRef, ResolutionOrigin};
+use sorcy_core::resolve::{RegistryConfig, SourceResolver};
 
 #[test]
 fn mvp_loop_python_repo_resolves_source_url() {
@@ -57,7 +58,7 @@ dependencies = ["requests>=2.31", "flask==3.0.0"]
         ..RegistryConfig::default()
     };
 
-    let records = sorcy::run_with_config(project_root, config).expect("run scan");
+    let records = sorcy_core::run_with_config(project_root, config).expect("run scan");
     handle.join().expect("mock server thread");
 
     assert_eq!(records.len(), 2);
@@ -152,7 +153,7 @@ tokio = "1"
         ..RegistryConfig::default()
     };
 
-    let mut records = sorcy::run_with_config(project_root, config).expect("run scan");
+    let mut records = sorcy_core::run_with_config(project_root, config).expect("run scan");
     records.sort();
     handle.join().expect("mock server thread");
 
@@ -200,7 +201,7 @@ fn resolves_cpp_from_vcpkg_configuration_repository_hints() {
     .expect("write vcpkg-configuration.json");
 
     let mut records =
-        sorcy::run_with_config(project_root, RegistryConfig::default()).expect("run scan");
+        sorcy_core::run_with_config(project_root, RegistryConfig::default()).expect("run scan");
     records.sort();
 
     assert_eq!(records.len(), 2);
@@ -208,6 +209,173 @@ fn resolves_cpp_from_vcpkg_configuration_repository_hints() {
     assert_eq!(records[0].source_url, "https://github.com/fmtlib/fmt");
     assert_eq!(records[1].dependency, "spdlog");
     assert_eq!(records[1].source_url, "https://github.com/gabime/spdlog");
+}
+
+#[test]
+fn project_scan_preserves_provenance_and_legacy_output_is_derived() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let project_root = temp.path();
+
+    fs::write(
+        project_root.join("pyproject.toml"),
+        r#"
+[project]
+name = "demo"
+version = "0.1.0"
+dependencies = ["requests>=2.31", "missinglib>=0.1"]
+"#,
+    )
+    .expect("write pyproject");
+    fs::write(
+        project_root.join("requirements-dev.txt"),
+        "requests==2.31.0\n",
+    )
+    .expect("write requirements");
+    fs::write(
+        project_root.join("vcpkg-configuration.json"),
+        r#"{
+  "registries": [
+    {
+      "kind": "git",
+      "repository": "git@github.com:fmtlib/fmt.git",
+      "packages": ["fmt"]
+    }
+  ]
+}"#,
+    )
+    .expect("write vcpkg config");
+
+    let resolver = StaticTestResolver;
+    let scan =
+        sorcy_core::scan_project_with_resolver(project_root, &resolver).expect("project scan");
+
+    assert_eq!(scan.root_path, project_root.to_path_buf());
+    assert_eq!(scan.manifests.len(), 3);
+    assert_eq!(scan.dependencies.len(), 4);
+    assert_eq!(scan.resolutions.len(), 4);
+
+    let fmt_dep = scan
+        .dependencies
+        .iter()
+        .find(|x| x.dependency_name == "fmt")
+        .expect("fmt dependency record");
+    assert!(fmt_dep
+        .manifest_path
+        .to_string_lossy()
+        .ends_with("vcpkg-configuration.json"));
+    assert!(fmt_dep.source_hint.is_some());
+
+    let fmt_resolution = scan
+        .resolutions
+        .iter()
+        .find(|x| x.dependency_name == "fmt")
+        .expect("fmt resolution");
+    assert_eq!(
+        fmt_resolution.resolution_origin,
+        ResolutionOrigin::SourceHint
+    );
+    assert_eq!(
+        fmt_resolution
+            .source_repo
+            .as_ref()
+            .expect("source repo")
+            .normalized_source_url,
+        "https://github.com/fmtlib/fmt"
+    );
+
+    let requests_resolution = scan
+        .resolutions
+        .iter()
+        .find(|x| {
+            x.dependency_name == "requests"
+                && x.resolution_origin == ResolutionOrigin::RegistryMetadata
+        })
+        .expect("requests resolution");
+    assert_eq!(
+        requests_resolution
+            .source_repo
+            .as_ref()
+            .expect("source repo")
+            .normalized_source_url,
+        "https://github.com/psf/requests"
+    );
+
+    let unresolved = scan
+        .resolutions
+        .iter()
+        .find(|x| x.dependency_name == "missinglib")
+        .expect("missinglib resolution");
+    assert_eq!(unresolved.resolution_origin, ResolutionOrigin::Unresolved);
+    assert!(unresolved.source_repo.is_none());
+
+    let records = sorcy_core::run_with_resolver(project_root, &resolver).expect("compat output");
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].dependency, "fmt");
+    assert_eq!(records[1].dependency, "requests");
+    assert_eq!(records[0].source_url, "https://github.com/fmtlib/fmt");
+    assert_eq!(records[1].source_url, "https://github.com/psf/requests");
+}
+
+#[test]
+fn registry_metadata_origin_is_set_for_registry_resolved_dependency() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let project_root = temp.path();
+
+    fs::write(
+        project_root.join("pyproject.toml"),
+        r#"
+[project]
+name = "demo"
+version = "0.1.0"
+dependencies = ["requests>=2.31"]
+"#,
+    )
+    .expect("write pyproject");
+
+    let (base_url, _hits, handle) = start_mock_server(
+        HashMap::from([(
+            "/pypi/requests/json",
+            r#"{
+                "info": {
+                    "project_urls": {
+                        "Source": "https://github.com/psf/requests"
+                    }
+                }
+            }"#,
+        )]),
+        1,
+    );
+
+    let config = RegistryConfig {
+        pypi_base_url: format!("{base_url}/pypi"),
+        npm_base_url: format!("{base_url}/npm"),
+        crates_base_url: format!("{base_url}/crates"),
+        ..RegistryConfig::default()
+    };
+
+    let scan = sorcy_core::scan_project_with_config(project_root, config).expect("scan project");
+    handle.join().expect("server thread");
+
+    assert_eq!(scan.resolutions.len(), 1);
+    assert_eq!(scan.resolutions[0].dependency_name, "requests");
+    assert_eq!(
+        scan.resolutions[0].resolution_origin,
+        ResolutionOrigin::RegistryMetadata
+    );
+}
+
+struct StaticTestResolver;
+
+impl SourceResolver for StaticTestResolver {
+    fn resolve(&self, dep: &DependencyRef) -> Option<String> {
+        if dep.source_hint.is_some() && dep.name == "fmt" {
+            return Some("https://github.com/fmtlib/fmt".to_string());
+        }
+        match dep.name.as_str() {
+            "requests" => Some("https://github.com/psf/requests".to_string()),
+            _ => None,
+        }
+    }
 }
 
 fn start_mock_server(
