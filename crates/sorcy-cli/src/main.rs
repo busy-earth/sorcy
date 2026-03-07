@@ -2,7 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
+use sorcy_core::repo::RepoUpdateStrategy;
 use sorcy_core::resolve::RegistryConfig;
 use sorcy_core::settings::{Settings, SettingsOverrides};
 
@@ -38,6 +39,33 @@ struct Args {
 
     #[arg(long)]
     http_retry_backoff_ms: Option<u64>,
+
+    #[arg(long)]
+    materialize: bool,
+
+    #[arg(long, requires = "materialize")]
+    materialize_rich: bool,
+
+    #[arg(long)]
+    repo_cache_dir: Option<PathBuf>,
+
+    #[arg(long, value_enum)]
+    repo_update_strategy: Option<CliRepoUpdateStrategy>,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+enum CliRepoUpdateStrategy {
+    MissingOnly,
+    FetchIfPresent,
+}
+
+impl CliRepoUpdateStrategy {
+    fn into_core(self) -> RepoUpdateStrategy {
+        match self {
+            Self::MissingOnly => RepoUpdateStrategy::MissingOnly,
+            Self::FetchIfPresent => RepoUpdateStrategy::FetchIfPresent,
+        }
+    }
 }
 
 fn main() {
@@ -56,22 +84,45 @@ fn run_cli(args: Args) -> Result<()> {
         http_timeout_seconds: args.http_timeout_seconds,
         http_retries: args.http_retries,
         http_retry_backoff_ms: args.http_retry_backoff_ms,
+        repo_cache_dir: args.repo_cache_dir,
+        repo_update_strategy: args
+            .repo_update_strategy
+            .map(CliRepoUpdateStrategy::into_core),
     })?;
-
-    let config = RegistryConfig {
-        pypi_base_url: settings.registry.pypi_base_url,
-        npm_base_url: settings.registry.npm_base_url,
-        crates_base_url: settings.registry.crates_base_url,
-        http_timeout_seconds: settings.http.timeout_seconds,
-        http_retries: settings.http.retries,
-        http_retry_backoff_ms: settings.http.retry_backoff_ms,
-    };
-    let records = sorcy_core::run_with_config(&args.path, config)?;
-
-    let json = if args.pretty {
-        serde_json::to_string_pretty(&records)?
+    let json = if args.materialize {
+        let materialization = sorcy_core::materialize_project_with_config(
+            &args.path,
+            sorcy_core::SorcyConfig::from_settings(settings),
+        )?;
+        if args.materialize_rich {
+            if args.pretty {
+                serde_json::to_string_pretty(&materialization)?
+            } else {
+                serde_json::to_string(&materialization)?
+            }
+        } else {
+            let records = sorcy_core::compatibility_records(&materialization.project_scan);
+            if args.pretty {
+                serde_json::to_string_pretty(&records)?
+            } else {
+                serde_json::to_string(&records)?
+            }
+        }
     } else {
-        serde_json::to_string(&records)?
+        let config = RegistryConfig {
+            pypi_base_url: settings.registry.pypi_base_url,
+            npm_base_url: settings.registry.npm_base_url,
+            crates_base_url: settings.registry.crates_base_url,
+            http_timeout_seconds: settings.http.timeout_seconds,
+            http_retries: settings.http.retries,
+            http_retry_backoff_ms: settings.http.retry_backoff_ms,
+        };
+        let records = sorcy_core::run_with_config(&args.path, config)?;
+        if args.pretty {
+            serde_json::to_string_pretty(&records)?
+        } else {
+            serde_json::to_string(&records)?
+        }
     };
 
     if let Some(output) = args.output {
