@@ -102,6 +102,29 @@ Write to file:
 cargo run -- . --output sorcy-sources.json --pretty
 ```
 
+Override network behavior from CLI:
+
+```bash
+cargo run -- . --http-timeout-seconds 20 --http-retries 5 --http-retry-backoff-ms 200
+```
+
+## Settings precedence (uv-style, small)
+
+`sorcy` resolves settings in this order:
+
+1. CLI arguments (highest)
+2. Environment variables
+3. Built-in defaults
+
+Supported environment variables:
+
+- `SORCY_PYPI_BASE_URL`
+- `SORCY_NPM_BASE_URL`
+- `SORCY_CRATES_BASE_URL`
+- `SORCY_HTTP_TIMEOUT_SECONDS`
+- `SORCY_HTTP_RETRIES`
+- `SORCY_HTTP_RETRY_BACKOFF_MS`
+
 ## Output format
 
 The output is JSON:

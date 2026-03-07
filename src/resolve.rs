@@ -39,14 +39,14 @@ const FORGE_PATH_CUT_MARKERS: &[&str] = &[
     "/releases/",
     "/wiki/",
 ];
-const MAX_FETCH_ATTEMPTS: usize = 3;
-const INITIAL_RETRY_BACKOFF_MS: u64 = 120;
-
 #[derive(Debug, Clone)]
 pub struct RegistryConfig {
     pub pypi_base_url: String,
     pub npm_base_url: String,
     pub crates_base_url: String,
+    pub http_timeout_seconds: u64,
+    pub http_retries: usize,
+    pub http_retry_backoff_ms: u64,
 }
 
 impl Default for RegistryConfig {
@@ -55,6 +55,9 @@ impl Default for RegistryConfig {
             pypi_base_url: "https://pypi.org/pypi".to_string(),
             npm_base_url: "https://registry.npmjs.org".to_string(),
             crates_base_url: "https://crates.io/api/v1/crates".to_string(),
+            http_timeout_seconds: 10,
+            http_retries: 3,
+            http_retry_backoff_ms: 120,
         }
     }
 }
@@ -71,7 +74,7 @@ pub trait SourceResolver {
 impl RegistryResolver {
     pub fn new(config: RegistryConfig) -> Result<Self> {
         let client = Client::builder()
-            .timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(config.http_timeout_seconds))
             .user_agent("sorcy/0.2")
             .build()?;
         Ok(Self { client, config })
@@ -192,19 +195,20 @@ impl RegistryResolver {
     }
 
     fn fetch_json(&self, url: &str) -> Option<Value> {
-        let mut backoff_ms = INITIAL_RETRY_BACKOFF_MS;
-        for attempt in 1..=MAX_FETCH_ATTEMPTS {
+        let retries = self.config.http_retries.max(1);
+        let mut backoff_ms = self.config.http_retry_backoff_ms;
+        for attempt in 1..=retries {
             match self.client.get(url).send() {
                 Ok(response) => {
                     if response.status().is_success() {
                         return response.json().ok();
                     }
-                    if !should_retry_status(response.status()) || attempt == MAX_FETCH_ATTEMPTS {
+                    if !should_retry_status(response.status()) || attempt == retries {
                         return None;
                     }
                 }
                 Err(error) => {
-                    if !should_retry_error(&error) || attempt == MAX_FETCH_ATTEMPTS {
+                    if !should_retry_error(&error) || attempt == retries {
                         return None;
                     }
                 }

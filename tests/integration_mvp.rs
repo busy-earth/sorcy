@@ -42,6 +42,7 @@ dependencies = ["requests>=2.31"]
         pypi_base_url: format!("{base_url}/pypi"),
         npm_base_url: format!("{base_url}/npm"),
         crates_base_url: format!("{base_url}/crates"),
+        ..RegistryConfig::default()
     };
 
     let records = sorcy::run_with_config(project_root, config).expect("run scan");
@@ -114,6 +115,7 @@ serde = "1"
         pypi_base_url: format!("{base_url}/pypi"),
         npm_base_url: format!("{base_url}/npm"),
         crates_base_url: format!("{base_url}/crates"),
+        ..RegistryConfig::default()
     };
 
     let mut records = sorcy::run_with_config(project_root, config).expect("run scan");

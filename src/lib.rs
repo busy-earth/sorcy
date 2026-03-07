@@ -3,6 +3,7 @@ pub mod model;
 pub mod parse;
 pub mod resolve;
 pub mod scan;
+pub mod settings;
 
 use std::path::Path;
 
