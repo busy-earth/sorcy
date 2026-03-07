@@ -1,6 +1,9 @@
 use std::env;
+use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+
+use crate::repo::{default_repo_cache_dir, RepoUpdateStrategy};
 
 #[derive(Debug, Clone)]
 pub struct HttpSettings {
@@ -17,9 +20,16 @@ pub struct RegistrySettings {
 }
 
 #[derive(Debug, Clone)]
+pub struct RepoSettings {
+    pub cache_dir: PathBuf,
+    pub update_strategy: RepoUpdateStrategy,
+}
+
+#[derive(Debug, Clone)]
 pub struct Settings {
     pub registry: RegistrySettings,
     pub http: HttpSettings,
+    pub repo: RepoSettings,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -30,6 +40,8 @@ pub struct SettingsOverrides {
     pub http_timeout_seconds: Option<u64>,
     pub http_retries: Option<usize>,
     pub http_retry_backoff_ms: Option<u64>,
+    pub repo_cache_dir: Option<PathBuf>,
+    pub repo_update_strategy: Option<RepoUpdateStrategy>,
 }
 
 impl Settings {
@@ -73,6 +85,18 @@ impl Settings {
             "SORCY_HTTP_RETRY_BACKOFF_MS",
             120,
         )?;
+        let repo_cache_dir = pick_pathbuf(
+            overrides.repo_cache_dir,
+            &get_env,
+            "SORCY_REPO_CACHE_DIR",
+            default_repo_cache_dir(),
+        );
+        let repo_update_strategy = pick_repo_update_strategy(
+            overrides.repo_update_strategy,
+            &get_env,
+            "SORCY_REPO_UPDATE_STRATEGY",
+            RepoUpdateStrategy::MissingOnly,
+        )?;
 
         Ok(Self {
             registry: RegistrySettings {
@@ -85,6 +109,10 @@ impl Settings {
                 // Keep at least one attempt so callers can safely use 1..=retries.
                 retries: retries.max(1),
                 retry_backoff_ms,
+            },
+            repo: RepoSettings {
+                cache_dir: repo_cache_dir,
+                update_strategy: repo_update_strategy,
             },
         })
     }
@@ -122,6 +150,21 @@ fn pick_u64(
     Ok(default)
 }
 
+fn pick_pathbuf(
+    override_value: Option<PathBuf>,
+    get_env: &impl Fn(&str) -> Option<String>,
+    env_key: &str,
+    default: PathBuf,
+) -> PathBuf {
+    if let Some(value) = override_value {
+        return value;
+    }
+    if let Some(value) = get_env(env_key) {
+        return PathBuf::from(value);
+    }
+    default
+}
+
 fn pick_usize(
     override_value: Option<usize>,
     get_env: &impl Fn(&str) -> Option<String>,
@@ -139,11 +182,29 @@ fn pick_usize(
     Ok(default)
 }
 
+fn pick_repo_update_strategy(
+    override_value: Option<RepoUpdateStrategy>,
+    get_env: &impl Fn(&str) -> Option<String>,
+    env_key: &str,
+    default: RepoUpdateStrategy,
+) -> Result<RepoUpdateStrategy> {
+    if let Some(value) = override_value {
+        return Ok(value);
+    }
+    if let Some(value) = get_env(env_key) {
+        return RepoUpdateStrategy::parse(&value)
+            .ok_or_else(|| anyhow!("invalid value for {env_key}: {value}"));
+    }
+    Ok(default)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
     use super::{Settings, SettingsOverrides};
+    use crate::repo::RepoUpdateStrategy;
 
     #[test]
     fn uses_defaults_when_no_overrides_or_env() {
@@ -158,6 +219,10 @@ mod tests {
         assert_eq!(settings.http.timeout_seconds, 10);
         assert_eq!(settings.http.retries, 3);
         assert_eq!(settings.http.retry_backoff_ms, 120);
+        assert_eq!(
+            settings.repo.update_strategy,
+            RepoUpdateStrategy::MissingOnly
+        );
     }
 
     #[test]
@@ -209,5 +274,32 @@ mod tests {
         .expect_err("expected invalid env parse error");
 
         assert!(err.to_string().contains("SORCY_HTTP_RETRIES"));
+    }
+
+    #[test]
+    fn repo_overrides_take_precedence_and_env_strategy_is_parsed() {
+        let mut env_map = HashMap::new();
+        env_map.insert(
+            "SORCY_REPO_UPDATE_STRATEGY".to_string(),
+            "fetch-if-present".to_string(),
+        );
+
+        let settings = Settings::resolve_with_env(
+            SettingsOverrides {
+                repo_cache_dir: Some(PathBuf::from("/tmp/custom-sorcy-cache")),
+                ..SettingsOverrides::default()
+            },
+            |key| env_map.get(key).cloned(),
+        )
+        .expect("settings resolve");
+
+        assert_eq!(
+            settings.repo.cache_dir,
+            PathBuf::from("/tmp/custom-sorcy-cache")
+        );
+        assert_eq!(
+            settings.repo.update_strategy,
+            RepoUpdateStrategy::FetchIfPresent
+        );
     }
 }

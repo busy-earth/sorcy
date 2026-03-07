@@ -1,20 +1,49 @@
 pub mod model;
 pub mod parse;
+pub mod repo;
 pub mod resolve;
 pub mod scan;
 pub mod settings;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use parse::parse_dependencies;
+use repo::{RepoManager, RepoManagerConfig, RepoUpdateStrategy};
 use resolve::{RegistryConfig, RegistryResolver, SourceResolver};
 use scan::discover_manifests;
+use settings::{Settings, SettingsOverrides};
 
 pub use model::{
-    DependencyRecord, DependencyRef, Ecosystem, ManifestKind, ManifestRecord, ProjectScan,
+    DependencyRecord, DependencyRef, Ecosystem, ManagedRepo, ManagedRepoStatus, ManifestKind,
+    ManifestRecord, MaterializedResolution, ProjectMaterialization, ProjectScan, RepoCache,
     ResolutionOrigin, ResolutionRecord, SourceRecord, SourceRepo,
 };
+pub use repo::{default_repo_cache_dir, GitRunner};
+
+#[derive(Debug, Clone)]
+pub struct SorcyConfig {
+    pub registry: RegistryConfig,
+    pub repo_cache_dir: PathBuf,
+    pub repo_update_strategy: RepoUpdateStrategy,
+}
+
+impl SorcyConfig {
+    pub fn from_settings(settings: Settings) -> Self {
+        Self {
+            registry: RegistryConfig {
+                pypi_base_url: settings.registry.pypi_base_url,
+                npm_base_url: settings.registry.npm_base_url,
+                crates_base_url: settings.registry.crates_base_url,
+                http_timeout_seconds: settings.http.timeout_seconds,
+                http_retries: settings.http.retries,
+                http_retry_backoff_ms: settings.http.retry_backoff_ms,
+            },
+            repo_cache_dir: settings.repo.cache_dir,
+            repo_update_strategy: settings.repo.update_strategy,
+        }
+    }
+}
 
 pub fn scan_project(root: &Path) -> Result<ProjectScan> {
     scan_project_with_config(root, RegistryConfig::default())
@@ -124,6 +153,54 @@ pub fn run_with_config(root: &Path, config: RegistryConfig) -> Result<Vec<Source
 pub fn run_with_resolver(root: &Path, resolver: &impl SourceResolver) -> Result<Vec<SourceRecord>> {
     let scan = scan_project_with_resolver(root, resolver)?;
     Ok(compatibility_records_from_scan(&scan))
+}
+
+pub fn materialize_project(root: &Path) -> Result<ProjectMaterialization> {
+    let settings = Settings::resolve(SettingsOverrides::default())?;
+    materialize_project_with_config(root, SorcyConfig::from_settings(settings))
+}
+
+pub fn materialize_project_with_config(
+    root: &Path,
+    config: SorcyConfig,
+) -> Result<ProjectMaterialization> {
+    let resolver = RegistryResolver::new(config.registry)?;
+    let repo_manager = RepoManager::new(RepoManagerConfig {
+        cache_dir: config.repo_cache_dir,
+        update_strategy: config.repo_update_strategy,
+    });
+    materialize_project_with_resolver(root, &resolver, &repo_manager)
+}
+
+pub fn materialize_project_with_resolver(
+    root: &Path,
+    resolver: &impl SourceResolver,
+    repo_manager: &RepoManager,
+) -> Result<ProjectMaterialization> {
+    let project_scan = scan_project_with_resolver(root, resolver)?;
+    let mut materialized_repos = Vec::new();
+    let mut materialized_resolutions = Vec::with_capacity(project_scan.resolutions.len());
+    for resolution in &project_scan.resolutions {
+        let managed_repo = resolution.source_repo.as_ref().map(|source_repo| {
+            let managed = repo_manager.materialize(source_repo);
+            materialized_repos.push(managed.clone());
+            managed
+        });
+        materialized_resolutions.push(MaterializedResolution {
+            resolution: resolution.clone(),
+            managed_repo,
+        });
+    }
+
+    Ok(ProjectMaterialization {
+        repo_cache: repo_manager.cache_summary(&materialized_repos),
+        project_scan,
+        materialized_resolutions,
+    })
+}
+
+pub fn compatibility_records(scan: &ProjectScan) -> Vec<SourceRecord> {
+    compatibility_records_from_scan(scan)
 }
 
 fn compatibility_records_from_scan(scan: &ProjectScan) -> Vec<SourceRecord> {

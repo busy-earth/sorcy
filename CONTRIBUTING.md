@@ -14,13 +14,21 @@ Thanks for helping improve `sorcy`.
 - `crates/sorcy-core/src/scan.rs`: manifest discovery
 - `crates/sorcy-core/src/parse/*`: per-ecosystem parsers (via `ManifestParser` trait)
 - `crates/sorcy-core/src/resolve.rs`: source URL resolution (via `SourceResolver` trait)
+- `crates/sorcy-core/src/repo.rs`: managed local clone cache materialization (`RepoManager`)
 - `crates/sorcy-core/src/settings.rs`: settings resolution (`CLI > env > defaults`)
 - `crates/sorcy-core/src/model.rs`: internal normalized model and compatibility output type
-- `crates/sorcy-core/src/lib.rs`: orchestration API (`scan_project*`, compatibility `run*`)
+- `crates/sorcy-core/src/lib.rs`: orchestration API (`scan_project*`, compatibility `run*`, `materialize_project*`)
 - `crates/sorcy-cli/src/main.rs`: thin CLI wrapper and process behavior
 - `crates/sorcy-core/tests/integration_mvp.rs`: end-to-end integration coverage
 
 Keep `sorcy-core` as the source of truth for product behavior. Keep `sorcy-cli` thin.
+
+## Materialization scope (current MVP step)
+
+- Materialization is opt-in and should not change default compatibility JSON behavior.
+- Managed clone cache is local and file-based (`index.json`), with deterministic paths.
+- Do not add graph building, Tree-sitter parsing/indexing, or metadata database layers in this step.
+- Prefer simple synchronous orchestration and small, testable interfaces.
 
 ## Adding support for a new forge host
 

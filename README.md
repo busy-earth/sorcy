@@ -57,14 +57,17 @@ Current behavior:
 1. Discover dependency manifests in a repo.
 2. Parse dependencies across supported ecosystems.
 3. Resolve source repository URLs from source hints or registry metadata.
-4. Output JSON records (`dependency`, `source_url`).
+4. Optionally materialize resolved source repositories into a managed hidden local clone cache.
+5. Output JSON records (`dependency`, `source_url`).
 
 What this step still does **not** do:
 
-- clone repositories
 - build dependency graphs
 - parse source files
 - run background services
+- run filesystem watchers
+- include a normalized metadata store or graph database
+- include Tree-sitter parsing/indexing
 
 ## Supported manifests
 
@@ -116,6 +119,18 @@ Write to file:
 cargo run -p sorcy -- . --output sorcy-sources.json --pretty
 ```
 
+Materialize resolved repositories into the hidden local cache while keeping default JSON output:
+
+```bash
+cargo run -p sorcy -- . --materialize
+```
+
+Materialize and print rich JSON (scan + cache + per-resolution clone state):
+
+```bash
+cargo run -p sorcy -- . --materialize --materialize-rich --pretty
+```
+
 Run tests:
 
 ```bash
@@ -138,3 +153,20 @@ Environment variables:
 - `SORCY_HTTP_TIMEOUT_SECONDS`
 - `SORCY_HTTP_RETRIES`
 - `SORCY_HTTP_RETRY_BACKOFF_MS`
+- `SORCY_REPO_CACHE_DIR`
+- `SORCY_REPO_UPDATE_STRATEGY` (`missing-only` or `fetch-if-present`)
+
+## Local clone cache
+
+When materialization is enabled, `sorcy-core` clones resolved upstream repositories into a hidden
+local cache directory:
+
+- default: `$XDG_CACHE_HOME/sorcy` or `~/.cache/sorcy`
+- override via `SORCY_REPO_CACHE_DIR` or CLI `--repo-cache-dir`
+
+Cache layout:
+
+- `repos/<host>/<owner>/<repo>` for deterministic human-inspectable clone paths
+- `index.json` for persisted clone metadata (status, path, last materialization time, error text)
+
+Default CLI behavior is unchanged unless `--materialize` is used.
