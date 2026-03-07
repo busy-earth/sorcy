@@ -1,7 +1,24 @@
 use anyhow::Result;
 use toml::Value;
 
-use crate::model::{DependencyRef, Ecosystem};
+use crate::model::{DependencyRef, Ecosystem, ManifestKind};
+
+use super::ManifestParser;
+
+pub struct CargoParser;
+
+impl ManifestParser for CargoParser {
+    fn supports(&self, kind: ManifestKind) -> bool {
+        matches!(kind, ManifestKind::CargoToml)
+    }
+
+    fn parse(&self, kind: ManifestKind, content: &str) -> Result<Vec<DependencyRef>> {
+        match kind {
+            ManifestKind::CargoToml => parse_cargo_toml(content),
+            _ => Ok(Vec::new()),
+        }
+    }
+}
 
 const TOP_LEVEL_SECTIONS: &[&str] = &["dependencies", "dev-dependencies", "build-dependencies"];
 

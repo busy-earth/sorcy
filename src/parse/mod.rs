@@ -6,28 +6,38 @@ pub mod python;
 use std::collections::BTreeSet;
 use std::fs;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 
-use crate::model::{ManifestFile, ManifestKind, ParsedDependency};
+use crate::model::{DependencyRef, ManifestFile, ManifestKind, ParsedDependency};
+
+pub trait ManifestParser {
+    fn supports(&self, kind: ManifestKind) -> bool;
+    fn parse(&self, kind: ManifestKind, content: &str) -> Result<Vec<DependencyRef>>;
+}
+
+fn parser_registry() -> Vec<Box<dyn ManifestParser>> {
+    vec![
+        Box::new(python::PythonParser),
+        Box::new(npm::NpmParser),
+        Box::new(cargo::CargoParser),
+        Box::new(cpp::CppParser),
+    ]
+}
 
 pub fn parse_dependencies(manifests: &[ManifestFile]) -> Result<Vec<ParsedDependency>> {
     let mut output = Vec::new();
     let mut seen = BTreeSet::new();
+    let parsers = parser_registry();
 
     for manifest in manifests {
         let content = fs::read_to_string(&manifest.path)
             .with_context(|| format!("failed reading {}", manifest.path.display()))?;
 
-        let parsed = match manifest.kind {
-            ManifestKind::PyProjectToml => python::parse_pyproject_toml(&content),
-            ManifestKind::RequirementsTxt => python::parse_requirements_txt(&content),
-            ManifestKind::PackageJson => npm::parse_package_json(&content),
-            ManifestKind::CargoToml => cargo::parse_cargo_toml(&content),
-            ManifestKind::VcpkgJson => cpp::parse_vcpkg_json(&content),
-            ManifestKind::VcpkgConfigurationJson => cpp::parse_vcpkg_configuration_json(&content),
-            ManifestKind::ConanfileTxt => cpp::parse_conanfile_txt(&content),
-            ManifestKind::ConanfilePy => cpp::parse_conanfile_py(&content),
-        }?;
+        let parsed = parsers
+            .iter()
+            .find(|parser| parser.supports(manifest.kind))
+            .ok_or_else(|| anyhow!("no parser registered for {:?}", manifest.kind))?
+            .parse(manifest.kind, &content)?;
 
         for dep in parsed {
             let key = (

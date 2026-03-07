@@ -8,6 +8,31 @@ a single JSON list of:
 
 The MVP is intentionally small and focused.
 
+## Install (quick)
+
+`sorcy` now includes a simple installer flow similar to uv's one-command style,
+adapted for this MVP.
+
+macOS / Linux:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/busy-earth/sorcy/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/busy-earth/sorcy/main/install.ps1 | iex"
+```
+
+Notes:
+
+- This installer uses `cargo install --git ...` under the hood.
+- You need Rust/Cargo installed first.
+- Optional env vars:
+  - `SORCY_VERSION` (install a specific git tag)
+  - `SORCY_REPO_URL` (install from a fork)
+
 ## MVP scope
 
 The core has four parts:
@@ -16,6 +41,18 @@ The core has four parts:
 2. **Parsers**: reads supported ecosystem formats.
 3. **Normalizer**: converts everything into one record shape.
 4. **Output**: returns final JSON list (`dependency`, `source_url`).
+
+## Scalable architecture (uv-inspired, right-sized)
+
+To keep growth clean for polyglot support, `sorcy` uses small module boundaries:
+
+- `scan` finds files
+- `parse` contains per-ecosystem parsers behind a shared parser trait
+- `resolve` contains resolvers behind a shared resolver trait
+- `lib` orchestrates scan → parse → resolve → output
+
+This keeps new ecosystems additive: add parser/resolver implementations without
+rewriting core orchestration.
 
 ## Supported manifests
 

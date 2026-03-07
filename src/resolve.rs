@@ -1,7 +1,8 @@
+use std::thread::sleep;
 use std::time::Duration;
 
 use anyhow::Result;
-use reqwest::blocking::Client;
+use reqwest::{blocking::Client, StatusCode};
 use serde_json::Value;
 
 use crate::model::{DependencyRef, Ecosystem};
@@ -38,6 +39,8 @@ const FORGE_PATH_CUT_MARKERS: &[&str] = &[
     "/releases/",
     "/wiki/",
 ];
+const MAX_FETCH_ATTEMPTS: usize = 3;
+const INITIAL_RETRY_BACKOFF_MS: u64 = 120;
 
 #[derive(Debug, Clone)]
 pub struct RegistryConfig {
@@ -61,6 +64,10 @@ pub struct RegistryResolver {
     config: RegistryConfig,
 }
 
+pub trait SourceResolver {
+    fn resolve(&self, dep: &DependencyRef) -> Option<String>;
+}
+
 impl RegistryResolver {
     pub fn new(config: RegistryConfig) -> Result<Self> {
         let client = Client::builder()
@@ -70,7 +77,7 @@ impl RegistryResolver {
         Ok(Self { client, config })
     }
 
-    pub fn resolve(&self, dep: &DependencyRef) -> Option<String> {
+    fn resolve_inner(&self, dep: &DependencyRef) -> Option<String> {
         if let Some(hint) = &dep.source_hint {
             return normalize_source_url(hint, true);
         }
@@ -185,12 +192,50 @@ impl RegistryResolver {
     }
 
     fn fetch_json(&self, url: &str) -> Option<Value> {
-        let response = self.client.get(url).send().ok()?;
-        if !response.status().is_success() {
-            return None;
+        let mut backoff_ms = INITIAL_RETRY_BACKOFF_MS;
+        for attempt in 1..=MAX_FETCH_ATTEMPTS {
+            match self.client.get(url).send() {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        return response.json().ok();
+                    }
+                    if !should_retry_status(response.status()) || attempt == MAX_FETCH_ATTEMPTS {
+                        return None;
+                    }
+                }
+                Err(error) => {
+                    if !should_retry_error(&error) || attempt == MAX_FETCH_ATTEMPTS {
+                        return None;
+                    }
+                }
+            }
+
+            sleep(Duration::from_millis(backoff_ms));
+            backoff_ms *= 2;
         }
-        response.json().ok()
+        None
     }
+}
+
+impl SourceResolver for RegistryResolver {
+    fn resolve(&self, dep: &DependencyRef) -> Option<String> {
+        self.resolve_inner(dep)
+    }
+}
+
+fn should_retry_status(status: StatusCode) -> bool {
+    matches!(
+        status,
+        StatusCode::REQUEST_TIMEOUT
+            | StatusCode::TOO_MANY_REQUESTS
+            | StatusCode::BAD_GATEWAY
+            | StatusCode::SERVICE_UNAVAILABLE
+            | StatusCode::GATEWAY_TIMEOUT
+    ) || status.as_u16() == 425
+}
+
+fn should_retry_error(error: &reqwest::Error) -> bool {
+    error.is_timeout() || error.is_connect()
 }
 
 fn normalize_source_url(candidate_url: &str, allow_unlisted_host: bool) -> Option<String> {

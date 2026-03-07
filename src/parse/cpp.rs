@@ -2,7 +2,33 @@ use anyhow::Result;
 use regex::Regex;
 use serde_json::Value;
 
-use crate::model::{DependencyRef, Ecosystem};
+use crate::model::{DependencyRef, Ecosystem, ManifestKind};
+
+use super::ManifestParser;
+
+pub struct CppParser;
+
+impl ManifestParser for CppParser {
+    fn supports(&self, kind: ManifestKind) -> bool {
+        matches!(
+            kind,
+            ManifestKind::VcpkgJson
+                | ManifestKind::VcpkgConfigurationJson
+                | ManifestKind::ConanfileTxt
+                | ManifestKind::ConanfilePy
+        )
+    }
+
+    fn parse(&self, kind: ManifestKind, content: &str) -> Result<Vec<DependencyRef>> {
+        match kind {
+            ManifestKind::VcpkgJson => parse_vcpkg_json(content),
+            ManifestKind::VcpkgConfigurationJson => parse_vcpkg_configuration_json(content),
+            ManifestKind::ConanfileTxt => parse_conanfile_txt(content),
+            ManifestKind::ConanfilePy => parse_conanfile_py(content),
+            _ => Ok(Vec::new()),
+        }
+    }
+}
 
 pub fn parse_vcpkg_json(content: &str) -> Result<Vec<DependencyRef>> {
     let data: Value = serde_json::from_str(content)?;
