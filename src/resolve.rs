@@ -1,0 +1,297 @@
+use std::time::Duration;
+
+use anyhow::Result;
+use reqwest::blocking::Client;
+use serde_json::Value;
+
+use crate::model::{DependencyRef, Ecosystem};
+
+const KNOWN_FORGE_HOSTS: &[&str] = &[
+    "github.com",
+    "gitlab.com",
+    "bitbucket.org",
+    "codeberg.org",
+    "git.sr.ht",
+];
+const KNOWN_FORGE_HOST_TOKENS: &[&str] = &[
+    "github",
+    "gitlab",
+    "bitbucket",
+    "codeberg",
+    "sourcehut",
+    "gitea",
+    "forgejo",
+];
+const FORGE_PATH_CUT_MARKERS: &[&str] = &[
+    "/-/",
+    "/tree/",
+    "/blob/",
+    "/src/",
+    "/raw/",
+    "/issues/",
+    "/pull/",
+    "/pulls/",
+    "/merge_requests/",
+    "/commit/",
+    "/commits/",
+    "/release/",
+    "/releases/",
+    "/wiki/",
+];
+
+#[derive(Debug, Clone)]
+pub struct RegistryConfig {
+    pub pypi_base_url: String,
+    pub npm_base_url: String,
+    pub crates_base_url: String,
+}
+
+impl Default for RegistryConfig {
+    fn default() -> Self {
+        Self {
+            pypi_base_url: "https://pypi.org/pypi".to_string(),
+            npm_base_url: "https://registry.npmjs.org".to_string(),
+            crates_base_url: "https://crates.io/api/v1/crates".to_string(),
+        }
+    }
+}
+
+pub struct RegistryResolver {
+    client: Client,
+    config: RegistryConfig,
+}
+
+impl RegistryResolver {
+    pub fn new(config: RegistryConfig) -> Result<Self> {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(10))
+            .user_agent("sorcy/0.2")
+            .build()?;
+        Ok(Self { client, config })
+    }
+
+    pub fn resolve(&self, dep: &DependencyRef) -> Option<String> {
+        if let Some(hint) = &dep.source_hint {
+            return normalize_source_url(hint, true);
+        }
+        match dep.ecosystem {
+            Ecosystem::Python => self.resolve_python(&dep.name),
+            Ecosystem::Npm => self.resolve_npm(&dep.name),
+            Ecosystem::Cargo => self.resolve_cargo(&dep.name),
+            Ecosystem::Cpp => None,
+        }
+    }
+
+    fn resolve_python(&self, name: &str) -> Option<String> {
+        let url = format!(
+            "{}/{}/json",
+            self.config.pypi_base_url.trim_end_matches('/'),
+            name
+        );
+        let payload = self.fetch_json(&url)?;
+        let info = payload.get("info")?.as_object()?;
+
+        let mut preferred = Vec::new();
+        let mut fallback = Vec::new();
+
+        if let Some(project_urls) = info.get("project_urls").and_then(Value::as_object) {
+            for (label, value) in project_urls {
+                let Some(candidate) = value.as_str() else {
+                    continue;
+                };
+                let cleaned = candidate.trim();
+                if cleaned.is_empty() || is_pypi_project_url(cleaned) {
+                    continue;
+                }
+                if looks_preferred_label(label) {
+                    preferred.push(cleaned.to_string());
+                } else {
+                    fallback.push(cleaned.to_string());
+                }
+            }
+        }
+
+        for key in ["home_page", "project_url"] {
+            let Some(candidate) = info.get(key).and_then(Value::as_str) else {
+                continue;
+            };
+            let cleaned = candidate.trim();
+            if cleaned.is_empty() || is_pypi_project_url(cleaned) {
+                continue;
+            }
+            fallback.push(cleaned.to_string());
+        }
+
+        for candidate in preferred {
+            if let Some(url) = normalize_source_url(&candidate, true) {
+                return Some(url);
+            }
+        }
+        for candidate in fallback {
+            if let Some(url) = normalize_source_url(&candidate, false) {
+                return Some(url);
+            }
+        }
+        None
+    }
+
+    fn resolve_npm(&self, name: &str) -> Option<String> {
+        let encoded = name.replace('/', "%2F");
+        let url = format!(
+            "{}/{}",
+            self.config.npm_base_url.trim_end_matches('/'),
+            encoded
+        );
+        let payload = self.fetch_json(&url)?;
+
+        let mut candidates = Vec::new();
+        if let Some(repository) = payload.get("repository") {
+            if let Some(repo_url) = repository.as_str() {
+                candidates.push(repo_url.to_string());
+            } else if let Some(repo_url) = repository.get("url").and_then(Value::as_str) {
+                candidates.push(repo_url.to_string());
+            }
+        }
+        if let Some(homepage) = payload.get("homepage").and_then(Value::as_str) {
+            candidates.push(homepage.to_string());
+        }
+
+        for candidate in candidates {
+            if let Some(url) = normalize_source_url(&candidate, true) {
+                return Some(url);
+            }
+        }
+        None
+    }
+
+    fn resolve_cargo(&self, name: &str) -> Option<String> {
+        let url = format!(
+            "{}/{}",
+            self.config.crates_base_url.trim_end_matches('/'),
+            name
+        );
+        let payload = self.fetch_json(&url)?;
+        let crate_obj = payload.get("crate")?.as_object()?;
+
+        for key in ["repository", "homepage"] {
+            let Some(candidate) = crate_obj.get(key).and_then(Value::as_str) else {
+                continue;
+            };
+            if let Some(url) = normalize_source_url(candidate, true) {
+                return Some(url);
+            }
+        }
+        None
+    }
+
+    fn fetch_json(&self, url: &str) -> Option<Value> {
+        let response = self.client.get(url).send().ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        response.json().ok()
+    }
+}
+
+fn normalize_source_url(candidate_url: &str, allow_unlisted_host: bool) -> Option<String> {
+    let mut cleaned = candidate_url.trim().to_string();
+    if cleaned.starts_with("git+") {
+        cleaned = cleaned.trim_start_matches("git+").to_string();
+    }
+    let (host, path) = parse_host_path(&cleaned)?;
+    let host = host.to_ascii_lowercase();
+    if host == "pypi.org" {
+        return None;
+    }
+    if !allow_unlisted_host && !looks_like_forge_host(&host) {
+        return None;
+    }
+    let repo_path = extract_repo_path(&path)?;
+    Some(format!("https://{host}/{repo_path}"))
+}
+
+fn parse_host_path(candidate: &str) -> Option<(String, String)> {
+    if candidate.contains("://") {
+        let after_scheme = candidate.split_once("://")?.1;
+        let (authority, tail) = after_scheme
+            .split_once('/')
+            .map_or((after_scheme, ""), |(a, b)| (a, b));
+        let authority = authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, rest)| rest);
+        let host = authority.split_once(':').map_or(authority, |(h, _)| h);
+        if host.is_empty() {
+            return None;
+        }
+        let path = if tail.is_empty() {
+            "/".to_string()
+        } else {
+            format!("/{}", tail.split(['?', '#']).next().unwrap_or(""))
+        };
+        return Some((host.to_string(), path));
+    }
+
+    let at_split = candidate
+        .rsplit_once('@')
+        .map_or(candidate, |(_, rest)| rest);
+    let (host, path) = at_split.split_once(':')?;
+    Some((host.to_string(), path.to_string()))
+}
+
+fn extract_repo_path(path: &str) -> Option<String> {
+    let mut trimmed = path.trim().trim_matches('/').to_string();
+    for marker in FORGE_PATH_CUT_MARKERS {
+        if let Some((prefix, _)) = trimmed.split_once(marker) {
+            trimmed = prefix.to_string();
+        }
+    }
+    if trimmed.ends_with(".git") {
+        trimmed = trimmed.trim_end_matches(".git").to_string();
+    }
+    let parts: Vec<&str> = trimmed.split('/').filter(|x| !x.is_empty()).collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    Some(format!("{}/{}", parts[0], parts[1]))
+}
+
+fn looks_preferred_label(label: &str) -> bool {
+    let lowered = label.to_ascii_lowercase();
+    ["source", "repository", "repo", "code", "github"]
+        .iter()
+        .any(|token| lowered.contains(token))
+}
+
+fn is_pypi_project_url(url: &str) -> bool {
+    let lowered = url.to_ascii_lowercase();
+    lowered.starts_with("https://pypi.org/project/")
+        || lowered.starts_with("http://pypi.org/project/")
+}
+
+fn looks_like_forge_host(host: &str) -> bool {
+    KNOWN_FORGE_HOSTS.contains(&host)
+        || KNOWN_FORGE_HOST_TOKENS
+            .iter()
+            .any(|token| host.contains(token))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_source_url;
+
+    #[test]
+    fn source_url_normalization() {
+        assert_eq!(
+            normalize_source_url("git+https://github.com/pallets/flask.git", true),
+            Some("https://github.com/pallets/flask".into())
+        );
+        assert_eq!(
+            normalize_source_url("git@github.com:psf/requests.git", true),
+            Some("https://github.com/psf/requests".into())
+        );
+        assert_eq!(
+            normalize_source_url("https://gitlab.com/pallets/flask/-/tree/main", true),
+            Some("https://gitlab.com/pallets/flask".into())
+        );
+    }
+}
