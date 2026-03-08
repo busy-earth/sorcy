@@ -5,11 +5,12 @@ use anyhow::{bail, Context, Result};
 use regex::Regex;
 use walkdir::WalkDir;
 
-use crate::model::{ManagedRepo, ManagedRepoStatus, ProjectMaterialization};
+use crate::model::{Ecosystem, ManagedRepo, ManagedRepoStatus, ProjectMaterialization};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MaterializedRepoLookup {
     pub dependency_name: String,
+    pub ecosystem: Ecosystem,
     pub local_path: Option<PathBuf>,
     pub status: Option<ManagedRepoStatus>,
     pub source_url: Option<String>,
@@ -34,6 +35,7 @@ pub fn list_materialized_repos(
             let managed = item.managed_repo.as_ref();
             MaterializedRepoLookup {
                 dependency_name: item.resolution.dependency_name.clone(),
+                ecosystem: item.resolution.ecosystem.clone(),
                 local_path: managed.map(|repo| repo.local_path.clone()),
                 status: managed.map(|repo| repo.status),
                 source_url: item
@@ -50,6 +52,7 @@ pub fn list_materialized_repos(
     entries.sort_by(|a, b| {
         a.dependency_name
             .cmp(&b.dependency_name)
+            .then_with(|| a.ecosystem.cmp(&b.ecosystem))
             .then_with(|| a.source_url.cmp(&b.source_url))
             .then_with(|| a.local_path.cmp(&b.local_path))
     });
@@ -60,9 +63,28 @@ pub fn get_local_repo_for_dependency<'a>(
     project_materialization: &'a ProjectMaterialization,
     dep_name: &str,
 ) -> Option<&'a Path> {
+    select_local_repo_path(project_materialization, |item| {
+        item.resolution.dependency_name == dep_name
+    })
+}
+
+pub fn get_local_repo_for_dependency_in_ecosystem<'a>(
+    project_materialization: &'a ProjectMaterialization,
+    dep_name: &str,
+    ecosystem: Ecosystem,
+) -> Option<&'a Path> {
+    select_local_repo_path(project_materialization, |item| {
+        item.resolution.dependency_name == dep_name && item.resolution.ecosystem == ecosystem
+    })
+}
+
+fn select_local_repo_path<'a>(
+    project_materialization: &'a ProjectMaterialization,
+    should_include: impl Fn(&crate::model::MaterializedResolution) -> bool,
+) -> Option<&'a Path> {
     let mut selected: Option<&Path> = None;
     for item in &project_materialization.materialized_resolutions {
-        if item.resolution.dependency_name != dep_name {
+        if !should_include(item) {
             continue;
         }
         let Some(repo) = item.managed_repo.as_ref() else {

@@ -2,12 +2,13 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use sorcy_core::model::{DependencyRef, ManagedRepoStatus};
+use sorcy_core::model::{DependencyRef, Ecosystem, ManagedRepoStatus};
 use sorcy_core::repo::{GitRunner, RepoManager, RepoManagerConfig, RepoUpdateStrategy};
 use sorcy_core::resolve::SourceResolver;
 use sorcy_core::FindFilesQuery;
 use sorcy_core::{
-    find_files, get_local_repo_for_dependency, list_materialized_repos, read_repo_file,
+    find_files, get_local_repo_for_dependency, get_local_repo_for_dependency_in_ecosystem,
+    list_materialized_repos, read_repo_file,
 };
 
 #[test]
@@ -45,6 +46,7 @@ dependencies = ["requests>=2.31", "missinglib>=0.1"]
         .iter()
         .find(|item| item.dependency_name == "missinglib")
         .expect("missing entry");
+    assert_eq!(missing.ecosystem, Ecosystem::Python);
     assert_eq!(missing.local_path, None);
     assert_eq!(missing.status, None);
     assert!(!missing.is_materialized);
@@ -53,6 +55,7 @@ dependencies = ["requests>=2.31", "missinglib>=0.1"]
         .iter()
         .find(|item| item.dependency_name == "requests")
         .expect("requests entry");
+    assert_eq!(requests.ecosystem, Ecosystem::Python);
     assert_eq!(
         requests.local_path,
         Some(cache_dir.join("repos/github.com/psf/requests"))
@@ -64,6 +67,68 @@ dependencies = ["requests>=2.31", "missinglib>=0.1"]
         .expect("local repo path for requests");
     assert_eq!(local_repo, cache_dir.join("repos/github.com/psf/requests"));
     assert!(get_local_repo_for_dependency(&materialization, "missinglib").is_none());
+}
+
+#[test]
+fn ecosystem_aware_lookup_disambiguates_same_dependency_name() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let project_root = temp.path();
+    fs::write(
+        project_root.join("Cargo.toml"),
+        r#"
+[package]
+name = "demo-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = "1"
+"#,
+    )
+    .expect("write Cargo.toml");
+    fs::write(
+        project_root.join("package.json"),
+        r#"{
+  "name": "demo-node",
+  "version": "1.0.0",
+  "dependencies": {
+    "serde": "^1.0.0"
+  }
+}"#,
+    )
+    .expect("write package.json");
+
+    let cache_dir = temp.path().join("cache");
+    let (runner, _state) = FakeGitRunner::new();
+    let repo_manager = RepoManager::with_git_runner(
+        RepoManagerConfig {
+            cache_dir: cache_dir.clone(),
+            update_strategy: RepoUpdateStrategy::MissingOnly,
+        },
+        Box::new(runner),
+    );
+    let resolver = EcosystemAwareResolver;
+    let materialization =
+        sorcy_core::materialize_project_with_resolver(project_root, &resolver, &repo_manager)
+            .expect("materialize project");
+
+    let npm_repo =
+        get_local_repo_for_dependency_in_ecosystem(&materialization, "serde", Ecosystem::Npm)
+            .expect("npm serde path");
+    let cargo_repo =
+        get_local_repo_for_dependency_in_ecosystem(&materialization, "serde", Ecosystem::Cargo)
+            .expect("cargo serde path");
+
+    assert_eq!(npm_repo, cache_dir.join("repos/github.com/npm/serde"));
+    assert_eq!(
+        cargo_repo,
+        cache_dir.join("repos/github.com/serde-rs/serde")
+    );
+    assert_ne!(npm_repo, cargo_repo);
+
+    let default_lookup =
+        get_local_repo_for_dependency(&materialization, "serde").expect("default serde path");
+    assert_eq!(default_lookup, npm_repo);
 }
 
 #[test]
@@ -129,6 +194,18 @@ impl SourceResolver for SourceQueryTestResolver {
     fn resolve(&self, dep: &DependencyRef) -> Option<String> {
         match dep.name.as_str() {
             "requests" => Some("https://github.com/psf/requests".to_string()),
+            _ => None,
+        }
+    }
+}
+
+struct EcosystemAwareResolver;
+
+impl SourceResolver for EcosystemAwareResolver {
+    fn resolve(&self, dep: &DependencyRef) -> Option<String> {
+        match (dep.ecosystem.clone(), dep.name.as_str()) {
+            (Ecosystem::Npm, "serde") => Some("https://github.com/npm/serde".to_string()),
+            (Ecosystem::Cargo, "serde") => Some("https://github.com/serde-rs/serde".to_string()),
             _ => None,
         }
     }
