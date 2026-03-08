@@ -22,8 +22,8 @@ pub use model::{
 };
 pub use repo::{default_repo_cache_dir, GitRunner};
 pub use source::{
-    find_files, get_local_repo_for_dependency, list_materialized_repos, read_repo_file,
-    FindFilesQuery, MaterializedRepoLookup,
+    find_files, get_local_repo_for_dependency, get_local_repo_for_dependency_in_ecosystem,
+    list_materialized_repos, read_repo_file, FindFilesQuery, MaterializedRepoLookup,
 };
 
 #[derive(Debug, Clone)]
