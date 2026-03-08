@@ -155,19 +155,7 @@ impl RegistryResolver {
         );
         let payload = self.fetch_json(&url)?;
 
-        let mut candidates = Vec::new();
-        if let Some(repository) = payload.get("repository") {
-            if let Some(repo_url) = repository.as_str() {
-                candidates.push(repo_url.to_string());
-            } else if let Some(repo_url) = repository.get("url").and_then(Value::as_str) {
-                candidates.push(repo_url.to_string());
-            }
-        }
-        if let Some(homepage) = payload.get("homepage").and_then(Value::as_str) {
-            candidates.push(homepage.to_string());
-        }
-
-        for candidate in candidates {
+        for candidate in npm_source_candidates(&payload) {
             if let Some(url) = normalize_source_url(&candidate, true) {
                 return Some(url);
             }
@@ -241,6 +229,52 @@ fn should_retry_status(status: StatusCode) -> bool {
 
 fn should_retry_error(error: &reqwest::Error) -> bool {
     error.is_timeout() || error.is_connect()
+}
+
+fn npm_source_candidates(payload: &Value) -> Vec<String> {
+    let mut candidates = Vec::new();
+
+    push_npm_repo_candidates(payload, &mut candidates);
+    push_if_str(payload.get("homepage"), &mut candidates);
+
+    let latest_version = payload
+        .get("dist-tags")
+        .and_then(|tags| tags.get("latest"))
+        .and_then(Value::as_str);
+    if let Some(latest) = latest_version {
+        if let Some(version_payload) = payload
+            .get("versions")
+            .and_then(Value::as_object)
+            .and_then(|versions| versions.get(latest))
+        {
+            push_npm_repo_candidates(version_payload, &mut candidates);
+            push_if_str(version_payload.get("homepage"), &mut candidates);
+        }
+    }
+
+    candidates
+}
+
+fn push_npm_repo_candidates(payload: &Value, candidates: &mut Vec<String>) {
+    let Some(repository) = payload.get("repository") else {
+        return;
+    };
+    push_if_str(Some(repository), candidates);
+    push_if_str(repository.get("url"), candidates);
+}
+
+fn push_if_str(value: Option<&Value>, output: &mut Vec<String>) {
+    let Some(candidate) = value.and_then(Value::as_str) else {
+        return;
+    };
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    if output.iter().any(|item| item == trimmed) {
+        return;
+    }
+    output.push(trimmed.to_string());
 }
 
 fn normalize_source_url(candidate_url: &str, allow_unlisted_host: bool) -> Option<String> {
@@ -327,7 +361,9 @@ fn looks_like_forge_host(host: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_source_url;
+    use serde_json::json;
+
+    use super::{normalize_source_url, npm_source_candidates};
 
     #[test]
     fn source_url_normalization() {
@@ -342,6 +378,38 @@ mod tests {
         assert_eq!(
             normalize_source_url("https://gitlab.com/pallets/flask/-/tree/main", true),
             Some("https://gitlab.com/pallets/flask".into())
+        );
+    }
+
+    #[test]
+    fn npm_candidates_fallback_to_latest_version_metadata() {
+        let payload = json!({
+            "name": "demo",
+            "dist-tags": {
+                "latest": "2.0.0"
+            },
+            "versions": {
+                "2.0.0": {
+                    "repository": {
+                        "type": "git",
+                        "url": "git+https://github.com/example/demo.git"
+                    },
+                    "homepage": "https://github.com/example/demo#readme"
+                }
+            }
+        });
+
+        let candidates = npm_source_candidates(&payload);
+        assert_eq!(
+            candidates,
+            vec![
+                "git+https://github.com/example/demo.git".to_string(),
+                "https://github.com/example/demo#readme".to_string()
+            ]
+        );
+        assert_eq!(
+            normalize_source_url(&candidates[0], true),
+            Some("https://github.com/example/demo".to_string())
         );
     }
 }

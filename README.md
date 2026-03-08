@@ -137,6 +137,14 @@ Run tests:
 cargo test --workspace
 ```
 
+Optional live smoke tests (opt-in, network + real repo clones):
+
+```bash
+SORCY_LIVE_TESTS=1 cargo test -p sorcy-core --test live_registry_optional -- --ignored --nocapture
+```
+
+Use this after larger feature work when you want extra confidence against real registries.
+
 ## Settings precedence
 
 `sorcy` resolves settings in this order:

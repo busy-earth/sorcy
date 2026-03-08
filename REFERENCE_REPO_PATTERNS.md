@@ -17,6 +17,22 @@ This document favors mature, maintained Rust projects and distills patterns that
 
 ## Pattern map for sorcy
 
+### Registry field matrix (DeepWiki-validated)
+
+- **PyPI (`pypi/warehouse`)**:
+  - Primary: `info.project_urls` (prefer labels like Source/Repository/Code/GitHub).
+  - Fallbacks: `info.home_page`, `info.project_url`.
+- **npm registry metadata (`verdaccio`-compatible shape)**:
+  - Primary: `repository` (string or `repository.url` object form).
+  - Secondary: `homepage`.
+  - Useful fallback: package version metadata for `dist-tags.latest` when top-level fields are missing.
+- **crates.io (`rust-lang/crates.io`)**:
+  - Primary: `crate.repository`.
+  - Fallback: `crate.homepage`.
+- **C/C++ (Conan + vcpkg)**:
+  - No single, universal registry API field equivalent across ecosystems.
+  - Practical current approach: manifest source hints (`vcpkg-configuration.json` registry repositories, other local hints).
+
 ### 1) Keep core logic separate from CLI and IO
 
 **Reference pattern**

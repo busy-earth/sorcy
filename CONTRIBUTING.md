@@ -54,6 +54,19 @@ When adding a forge:
 cargo test --workspace
 ```
 
+### Optional live registry + materialization smoke tests
+
+These tests are intentionally opt-in and are meant for bigger feature milestones.
+They hit real registries (PyPI, npm, crates.io), resolve real dependencies, and clone real repos.
+
+```bash
+SORCY_LIVE_TESTS=1 cargo test -p sorcy-core --test live_registry_optional -- --ignored --nocapture
+```
+
+Notes:
+- Not run in normal local loops or default CI yet.
+- Use when you want extra confidence before opening/finalizing a larger PR.
+
 ## Note about `AGENTS.md`
 
 `AGENTS.md` is for coding-agent environment behavior.  
