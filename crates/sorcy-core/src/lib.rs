@@ -4,6 +4,7 @@ pub mod repo;
 pub mod resolve;
 pub mod scan;
 pub mod settings;
+pub mod source;
 
 use std::path::{Path, PathBuf};
 
@@ -20,6 +21,10 @@ pub use model::{
     ResolutionOrigin, ResolutionRecord, SourceRecord, SourceRepo,
 };
 pub use repo::{default_repo_cache_dir, GitRunner};
+pub use source::{
+    find_files, get_local_repo_for_dependency, list_materialized_repos, read_repo_file,
+    FindFilesQuery, MaterializedRepoLookup,
+};
 
 #[derive(Debug, Clone)]
 pub struct SorcyConfig {
