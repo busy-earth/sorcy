@@ -113,6 +113,14 @@ Pretty JSON:
 cargo run -p sorcy -- . --pretty
 ```
 
+Run deterministic tiered relevance ranking harness:
+
+```bash
+cargo run -p sorcy -- --ranking-harness --pretty
+```
+
+Tier/scoring docs: `TIERED_RANKING_HARNESS.md`
+
 Write to file:
 
 ```bash

@@ -45,6 +45,13 @@ struct Args {
     #[arg(long, requires = "materialize")]
     materialize_rich: bool,
 
+    #[arg(
+        long,
+        conflicts_with = "materialize",
+        conflicts_with = "materialize_rich"
+    )]
+    ranking_harness: bool,
+
     #[arg(long)]
     repo_cache_dir: Option<PathBuf>,
 
@@ -89,7 +96,14 @@ fn run_cli(args: Args) -> Result<()> {
             .map(CliRepoUpdateStrategy::into_core),
     })?;
     let config = sorcy_core::SorcyConfig::from_settings(settings);
-    let json = if args.materialize {
+    let json = if args.ranking_harness {
+        let report = sorcy_core::run_tiered_ranking_harness();
+        if args.pretty {
+            serde_json::to_string_pretty(&report)?
+        } else {
+            serde_json::to_string(&report)?
+        }
+    } else if args.materialize {
         let materialization = sorcy_core::materialize_project_with_config(&args.path, config)?;
         if args.materialize_rich {
             if args.pretty {

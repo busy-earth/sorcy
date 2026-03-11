@@ -1,5 +1,6 @@
 pub mod model;
 pub mod parse;
+pub mod ranking;
 pub mod repo;
 pub mod resolve;
 pub mod scan;
@@ -19,6 +20,10 @@ pub use model::{
     DependencyRecord, DependencyRef, Ecosystem, ManagedRepo, ManagedRepoStatus, ManifestKind,
     ManifestRecord, MaterializedResolution, ProjectMaterialization, ProjectScan, RepoCache,
     ResolutionOrigin, ResolutionRecord, SourceRecord, SourceRepo,
+};
+pub use ranking::{
+    run_tiered_ranking_harness, BenchmarkScenario, CandidateSignals, HarnessReport, RankingTier,
+    RepoCandidate, ScenarioMetrics, ScenarioResult, StrategyName, StrategySummary,
 };
 pub use repo::{default_repo_cache_dir, GitRunner};
 pub use source::{
