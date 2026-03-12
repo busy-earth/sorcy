@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::ranking::RelevanceTier;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Ecosystem {
     Python,
@@ -74,6 +76,8 @@ pub struct ResolutionRecord {
     pub source_hint: Option<String>,
     pub source_repo: Option<SourceRepo>,
     pub resolution_origin: ResolutionOrigin,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tier: Option<RelevanceTier>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

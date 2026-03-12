@@ -1,9 +1,11 @@
 pub mod model;
 pub mod parse;
+pub mod ranking;
 pub mod repo;
 pub mod resolve;
 pub mod scan;
 pub mod settings;
+pub mod skill;
 pub mod source;
 
 use std::path::{Path, PathBuf};
@@ -20,7 +22,16 @@ pub use model::{
     ManifestRecord, MaterializedResolution, ProjectMaterialization, ProjectScan, RepoCache,
     ResolutionOrigin, ResolutionRecord, SourceRecord, SourceRepo,
 };
+pub use ranking::{
+    classify_seeded_tier, low_value_seeds_for_ecosystem, parse_rank_overrides, read_rank_overrides,
+    RankOverrides, RelevanceTier, RANK_OVERRIDES_FILE_NAME,
+};
 pub use repo::{default_repo_cache_dir, GitRunner};
+pub use skill::{
+    install_sorcy_rank_skill, install_sorcy_rank_skill_from_source, InstalledSkill,
+    SkillInstallScope, SKILL_INSTRUCTIONS_FILE_NAME, SKILL_RANKINGS_FILE_NAME,
+    SORCY_RANK_SKILL_NAME,
+};
 pub use source::{
     find_files, get_local_repo_for_dependency, get_local_repo_for_dependency_in_ecosystem,
     list_materialized_repos, read_repo_file, FindFilesQuery, MaterializedRepoLookup,
@@ -112,6 +123,7 @@ pub fn scan_project_with_resolver(
             source_hint: dependency.source_hint,
             source_repo,
             resolution_origin,
+            tier: None,
         };
 
         dependencies.push(dependency_record);
