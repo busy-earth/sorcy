@@ -1,0 +1,163 @@
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use anyhow::{bail, Context, Result};
+use walkdir::WalkDir;
+
+pub const SORCY_RANK_SKILL_NAME: &str = "sorcy-rank";
+pub const SKILL_INSTRUCTIONS_FILE_NAME: &str = "SKILL.md";
+pub const SKILL_RANKINGS_FILE_NAME: &str = "SORCY_RANKINGS.md";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkillInstallScope {
+    ProjectLocal,
+    Global,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledSkill {
+    pub source_dir: PathBuf,
+    pub target_dir: PathBuf,
+}
+
+pub fn install_sorcy_rank_skill(
+    project_root: &Path,
+    scope: SkillInstallScope,
+) -> Result<InstalledSkill> {
+    let source_dir = locate_sorcy_rank_skill_source_dir()?;
+    let install_root = match scope {
+        SkillInstallScope::ProjectLocal => project_root.join(".skills"),
+        SkillInstallScope::Global => global_skill_root()?,
+    };
+    install_sorcy_rank_skill_from_source(&source_dir, &install_root)
+}
+
+pub fn install_sorcy_rank_skill_from_source(
+    source_skill_dir: &Path,
+    install_root: &Path,
+) -> Result<InstalledSkill> {
+    let source_skill_file = source_skill_dir.join(SKILL_INSTRUCTIONS_FILE_NAME);
+    let source_rankings_file = source_skill_dir.join(SKILL_RANKINGS_FILE_NAME);
+    if !source_skill_file.is_file() {
+        bail!(
+            "source skill is missing {} at {}",
+            SKILL_INSTRUCTIONS_FILE_NAME,
+            source_skill_file.display()
+        );
+    }
+    if !source_rankings_file.is_file() {
+        bail!(
+            "source skill is missing {} at {}",
+            SKILL_RANKINGS_FILE_NAME,
+            source_rankings_file.display()
+        );
+    }
+
+    let target_dir = install_root.join(SORCY_RANK_SKILL_NAME);
+    copy_skill_tree(source_skill_dir, &target_dir)?;
+
+    Ok(InstalledSkill {
+        source_dir: source_skill_dir.to_path_buf(),
+        target_dir,
+    })
+}
+
+fn copy_skill_tree(source_skill_dir: &Path, target_skill_dir: &Path) -> Result<()> {
+    fs::create_dir_all(target_skill_dir)
+        .with_context(|| format!("failed creating {}", target_skill_dir.display()))?;
+
+    for entry in WalkDir::new(source_skill_dir) {
+        let entry = entry?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let source_path = entry.path();
+        let relative_path = source_path
+            .strip_prefix(source_skill_dir)
+            .with_context(|| {
+                format!(
+                    "failed to strip source prefix for {}",
+                    source_path.display()
+                )
+            })?;
+        let target_path = target_skill_dir.join(relative_path);
+        if target_path
+            .file_name()
+            .is_some_and(|name| name == SKILL_RANKINGS_FILE_NAME)
+            && target_path.exists()
+        {
+            continue;
+        }
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("failed creating {}", parent.display()))?;
+        }
+        fs::copy(source_path, &target_path).with_context(|| {
+            format!(
+                "failed copying {} to {}",
+                source_path.display(),
+                target_path.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn locate_sorcy_rank_skill_source_dir() -> Result<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(override_dir) = env::var_os("SORCY_SKILLS_DIR") {
+        candidates.push(PathBuf::from(override_dir).join(SORCY_RANK_SKILL_NAME));
+    }
+    if let Ok(exe) = env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            candidates.push(parent.join("skills").join(SORCY_RANK_SKILL_NAME));
+            candidates.push(parent.join("../skills").join(SORCY_RANK_SKILL_NAME));
+            candidates.push(
+                parent
+                    .join("../share/sorcy/skills")
+                    .join(SORCY_RANK_SKILL_NAME),
+            );
+        }
+    }
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills")
+            .join(SORCY_RANK_SKILL_NAME),
+    );
+    if let Ok(cwd) = env::current_dir() {
+        candidates.push(cwd.join("skills").join(SORCY_RANK_SKILL_NAME));
+    }
+
+    for candidate in candidates {
+        if candidate.join(SKILL_INSTRUCTIONS_FILE_NAME).is_file()
+            && candidate.join(SKILL_RANKINGS_FILE_NAME).is_file()
+        {
+            return Ok(candidate);
+        }
+    }
+    bail!("unable to locate sorcy-rank source skill folder")
+}
+
+fn global_skill_root() -> Result<PathBuf> {
+    if cfg!(target_os = "windows") {
+        let app_data = env::var_os("APPDATA").context("APPDATA is not set")?;
+        return Ok(PathBuf::from(app_data).join("Claude").join("skills"));
+    }
+
+    let home = env::var_os("HOME").context("HOME is not set")?;
+    let mut path = PathBuf::from(home);
+    if cfg!(target_os = "macos") {
+        path.push("Library");
+        path.push("Application Support");
+        path.push("Claude");
+        path.push("skills");
+    } else {
+        path.push(".config");
+        path.push("claude");
+        path.push("skills");
+    }
+    Ok(path)
+}
