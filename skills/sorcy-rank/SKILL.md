@@ -1,10 +1,24 @@
 ---
 name: sorcy-rank
-description: Use this skill when deciding which dependency source repos (depos)
-  are most relevant to this project. Invoke to generate or refresh
-  SORCY_RANKINGS.md with ranked depo tiers for agent context prioritization.
-allowed-tools: "Bash, Read, Write"
-version: 1.0.0
+description: Use this skill when an agent needs to prioritize which depos to search
+  first for this project. Invoke after running sorcy scan output to generate or
+  refresh SORCY_RANKINGS.md with Orbit/Transit/Distant/Void tiers.
+allowed-tools:
+  - Read
+  - Write
+  - Bash
+compatibility:
+  - cursor
+  - claude-code
+  - codex
+metadata:
+  author: busy-earth
+  version: 1.0.0
+  tags:
+    - sorcy
+    - rank
+    - depos
+license: MIT
 ---
 
 # sorcy-rank

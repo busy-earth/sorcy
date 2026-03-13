@@ -28,8 +28,9 @@ pub use ranking::{
 };
 pub use repo::{default_repo_cache_dir, GitRunner};
 pub use skill::{
-    install_sorcy_rank_skill, install_sorcy_rank_skill_from_source, InstalledSkill,
-    SkillInstallScope, SKILL_INSTRUCTIONS_FILE_NAME, SKILL_RANKINGS_FILE_NAME,
+    install_sorcy_rank_skill, install_sorcy_rank_skill_from_source,
+    install_sorcy_rank_skill_with_root_override, InstalledSkill, SkillInstallScope,
+    GLOBAL_SKILLS_DIR, PROJECT_SKILLS_DIR, SKILL_INSTRUCTIONS_FILE_NAME, SKILL_RANKINGS_FILE_NAME,
     SORCY_RANK_SKILL_NAME,
 };
 pub use source::{
