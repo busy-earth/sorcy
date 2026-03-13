@@ -76,8 +76,6 @@ pub struct ResolutionRecord {
     pub source_hint: Option<String>,
     pub source_repo: Option<SourceRepo>,
     pub resolution_origin: ResolutionOrigin,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tier: Option<RelevanceTier>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,6 +84,8 @@ pub struct SourceRepo {
     pub host: String,
     pub owner: String,
     pub repo: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tier: Option<RelevanceTier>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
