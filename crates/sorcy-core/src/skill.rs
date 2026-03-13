@@ -10,6 +10,7 @@ pub const SKILL_INSTRUCTIONS_FILE_NAME: &str = "SKILL.md";
 pub const SKILL_RANKINGS_FILE_NAME: &str = "SORCY_RANKINGS.md";
 pub const PROJECT_SKILLS_DIR: &str = ".claude/skills";
 pub const GLOBAL_SKILLS_DIR: &str = ".claude/skills";
+pub const SKILLS_DIR_OVERRIDE_ENV: &str = "SORCY_SKILLS_DIR";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkillInstallScope {
@@ -122,7 +123,7 @@ fn copy_skill_tree(source_skill_dir: &Path, target_skill_dir: &Path) -> Result<(
 
 fn locate_sorcy_rank_skill_source_dir() -> Result<PathBuf> {
     let mut candidates = Vec::new();
-    if let Some(override_dir) = env::var_os("SORCY_SKILLS_DIR") {
+    if let Some(override_dir) = env::var_os(SKILLS_DIR_OVERRIDE_ENV) {
         candidates.push(PathBuf::from(override_dir).join(SORCY_RANK_SKILL_NAME));
     }
     if let Ok(exe) = env::current_exe() {
@@ -135,14 +136,6 @@ fn locate_sorcy_rank_skill_source_dir() -> Result<PathBuf> {
                     .join(SORCY_RANK_SKILL_NAME),
             );
         }
-    }
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../skills")
-            .join(SORCY_RANK_SKILL_NAME),
-    );
-    if let Ok(cwd) = env::current_dir() {
-        candidates.push(cwd.join("skills").join(SORCY_RANK_SKILL_NAME));
     }
 
     for candidate in candidates {
