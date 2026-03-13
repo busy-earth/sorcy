@@ -1,11 +1,14 @@
 use std::fs;
+use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 
 use sorcy_core::model::Ecosystem;
 use sorcy_core::{
     classify_seeded_tier, install_sorcy_rank_skill_from_source,
     install_sorcy_rank_skill_with_root_override, parse_rank_overrides, read_rank_overrides,
     RelevanceTier, SkillInstallScope, PROJECT_SKILLS_DIR, RANK_OVERRIDES_FILE_NAME,
-    SKILL_INSTRUCTIONS_FILE_NAME, SKILL_RANKINGS_FILE_NAME, SORCY_RANK_SKILL_NAME,
+    SKILLS_DIR_OVERRIDE_ENV, SKILL_INSTRUCTIONS_FILE_NAME, SKILL_RANKINGS_FILE_NAME,
+    SORCY_RANK_SKILL_NAME,
 };
 
 #[test]
@@ -122,11 +125,14 @@ fn install_skill_copies_files_and_preserves_existing_rankings() {
 #[test]
 fn project_local_install_defaults_to_claude_skills_path() {
     let temp = tempfile::tempdir().expect("temp dir");
-    let installed = install_sorcy_rank_skill_with_root_override(
-        temp.path(),
-        SkillInstallScope::ProjectLocal,
-        None,
-    )
+    let source_root = repo_skill_source_root();
+    let installed = with_skills_dir_override(source_root.as_path(), || {
+        install_sorcy_rank_skill_with_root_override(
+            temp.path(),
+            SkillInstallScope::ProjectLocal,
+            None,
+        )
+    })
     .expect("install skill");
 
     let expected = temp
@@ -142,4 +148,38 @@ fn project_local_install_defaults_to_claude_skills_path() {
         .target_dir
         .join(SKILL_RANKINGS_FILE_NAME)
         .is_file());
+}
+
+fn repo_skill_source_root() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../skills")
+        .to_path_buf()
+}
+
+fn with_skills_dir_override<T>(
+    skills_root: &Path,
+    run: impl FnOnce() -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    let env_lock = env_lock();
+    let _guard = env_lock.lock().expect("env mutex poisoned");
+
+    let previous = std::env::var_os(SKILLS_DIR_OVERRIDE_ENV);
+    unsafe {
+        std::env::set_var(SKILLS_DIR_OVERRIDE_ENV, skills_root);
+    }
+    let result = run();
+    match previous {
+        Some(value) => unsafe {
+            std::env::set_var(SKILLS_DIR_OVERRIDE_ENV, value);
+        },
+        None => unsafe {
+            std::env::remove_var(SKILLS_DIR_OVERRIDE_ENV);
+        },
+    }
+    result
+}
+
+fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
