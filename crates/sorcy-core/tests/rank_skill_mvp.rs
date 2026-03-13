@@ -2,9 +2,10 @@ use std::fs;
 
 use sorcy_core::model::Ecosystem;
 use sorcy_core::{
-    classify_seeded_tier, install_sorcy_rank_skill_from_source, parse_rank_overrides,
-    read_rank_overrides, RelevanceTier, RANK_OVERRIDES_FILE_NAME, SKILL_INSTRUCTIONS_FILE_NAME,
-    SKILL_RANKINGS_FILE_NAME,
+    classify_seeded_tier, install_sorcy_rank_skill_from_source,
+    install_sorcy_rank_skill_with_root_override, parse_rank_overrides, read_rank_overrides,
+    RelevanceTier, SkillInstallScope, PROJECT_SKILLS_DIR, RANK_OVERRIDES_FILE_NAME,
+    SKILL_INSTRUCTIONS_FILE_NAME, SKILL_RANKINGS_FILE_NAME, SORCY_RANK_SKILL_NAME,
 };
 
 #[test]
@@ -116,4 +117,29 @@ fn install_skill_copies_files_and_preserves_existing_rankings() {
             .expect("read installed rankings after reinstall"),
         "# Sorcy Rankings\ncustom ranking data\n"
     );
+}
+
+#[test]
+fn project_local_install_defaults_to_claude_skills_path() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let installed = install_sorcy_rank_skill_with_root_override(
+        temp.path(),
+        SkillInstallScope::ProjectLocal,
+        None,
+    )
+    .expect("install skill");
+
+    let expected = temp
+        .path()
+        .join(PROJECT_SKILLS_DIR)
+        .join(SORCY_RANK_SKILL_NAME);
+    assert_eq!(installed.target_dir, expected);
+    assert!(installed
+        .target_dir
+        .join(SKILL_INSTRUCTIONS_FILE_NAME)
+        .is_file());
+    assert!(installed
+        .target_dir
+        .join(SKILL_RANKINGS_FILE_NAME)
+        .is_file());
 }

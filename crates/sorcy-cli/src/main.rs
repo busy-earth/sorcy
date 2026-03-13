@@ -29,6 +29,9 @@ enum CliCommand {
 struct InstallSkillArgs {
     #[arg(long)]
     global: bool,
+
+    #[arg(long)]
+    install_root: Option<PathBuf>,
 }
 
 #[derive(Debug, ClapArgs)]
@@ -111,7 +114,12 @@ fn run_install_skill(args: InstallSkillArgs) -> Result<()> {
     } else {
         sorcy_core::SkillInstallScope::ProjectLocal
     };
-    let installed = sorcy_core::install_sorcy_rank_skill(&project_root, scope)?;
+    let install_root = args.install_root.as_deref();
+    let installed = sorcy_core::install_sorcy_rank_skill_with_root_override(
+        &project_root,
+        scope,
+        install_root,
+    )?;
     println!(
         "Installed sorcy-rank skill at {}",
         installed.target_dir.display()
@@ -185,7 +193,33 @@ mod tests {
     fn parses_install_skill_subcommand() {
         let args = CliArgs::parse_from(["sorcy", "install-skill", "--global"]);
         match args.command {
-            Some(CliCommand::InstallSkill(install_args)) => assert!(install_args.global),
+            Some(CliCommand::InstallSkill(install_args)) => {
+                assert!(install_args.global);
+                assert!(install_args.install_root.is_none());
+            }
+            _ => panic!("expected install-skill command"),
+        }
+    }
+
+    #[test]
+    fn parses_install_skill_with_custom_root() {
+        let args = CliArgs::parse_from([
+            "sorcy",
+            "install-skill",
+            "--install-root",
+            "./custom/skills",
+        ]);
+        match args.command {
+            Some(CliCommand::InstallSkill(install_args)) => {
+                assert!(!install_args.global);
+                assert_eq!(
+                    install_args
+                        .install_root
+                        .expect("install root should parse")
+                        .to_string_lossy(),
+                    "./custom/skills"
+                );
+            }
             _ => panic!("expected install-skill command"),
         }
     }

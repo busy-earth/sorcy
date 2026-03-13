@@ -8,6 +8,8 @@ use walkdir::WalkDir;
 pub const SORCY_RANK_SKILL_NAME: &str = "sorcy-rank";
 pub const SKILL_INSTRUCTIONS_FILE_NAME: &str = "SKILL.md";
 pub const SKILL_RANKINGS_FILE_NAME: &str = "SORCY_RANKINGS.md";
+pub const PROJECT_SKILLS_DIR: &str = ".claude/skills";
+pub const GLOBAL_SKILLS_DIR: &str = ".claude/skills";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkillInstallScope {
@@ -25,10 +27,22 @@ pub fn install_sorcy_rank_skill(
     project_root: &Path,
     scope: SkillInstallScope,
 ) -> Result<InstalledSkill> {
+    install_sorcy_rank_skill_with_root_override(project_root, scope, None)
+}
+
+pub fn install_sorcy_rank_skill_with_root_override(
+    project_root: &Path,
+    scope: SkillInstallScope,
+    install_root_override: Option<&Path>,
+) -> Result<InstalledSkill> {
     let source_dir = locate_sorcy_rank_skill_source_dir()?;
-    let install_root = match scope {
-        SkillInstallScope::ProjectLocal => project_root.join(".skills"),
-        SkillInstallScope::Global => global_skill_root()?,
+    let install_root = if let Some(path) = install_root_override {
+        path.to_path_buf()
+    } else {
+        match scope {
+            SkillInstallScope::ProjectLocal => project_root.join(PROJECT_SKILLS_DIR),
+            SkillInstallScope::Global => global_skill_root()?,
+        }
     };
     install_sorcy_rank_skill_from_source(&source_dir, &install_root)
 }
@@ -142,22 +156,12 @@ fn locate_sorcy_rank_skill_source_dir() -> Result<PathBuf> {
 }
 
 fn global_skill_root() -> Result<PathBuf> {
-    if cfg!(target_os = "windows") {
-        let app_data = env::var_os("APPDATA").context("APPDATA is not set")?;
-        return Ok(PathBuf::from(app_data).join("Claude").join("skills"));
-    }
+    let home = home_dir().context("HOME is not set")?;
+    Ok(home.join(GLOBAL_SKILLS_DIR))
+}
 
-    let home = env::var_os("HOME").context("HOME is not set")?;
-    let mut path = PathBuf::from(home);
-    if cfg!(target_os = "macos") {
-        path.push("Library");
-        path.push("Application Support");
-        path.push("Claude");
-        path.push("skills");
-    } else {
-        path.push(".config");
-        path.push("claude");
-        path.push("skills");
-    }
-    Ok(path)
+fn home_dir() -> Option<PathBuf> {
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
 }
