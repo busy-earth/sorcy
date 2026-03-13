@@ -98,6 +98,7 @@ pub fn scan_project_with_resolver(
 
     for parsed in parsed_dependencies {
         let dependency = parsed.dependency;
+        let seeded_tier = classify_seeded_tier(&dependency.ecosystem, &dependency.name);
         let source_url = resolver.resolve(&dependency);
         let resolution_origin = match (dependency.source_hint.as_ref(), source_url.as_ref()) {
             (Some(_), Some(_)) => ResolutionOrigin::SourceHint,
@@ -115,7 +116,7 @@ pub fn scan_project_with_resolver(
 
         let source_repo = source_url
             .as_deref()
-            .and_then(source_repo_from_normalized_url);
+            .and_then(|url| source_repo_from_normalized_url(url, seeded_tier));
         let resolution_record = ResolutionRecord {
             dependency_name: dependency.name,
             ecosystem: dependency.ecosystem,
@@ -124,7 +125,6 @@ pub fn scan_project_with_resolver(
             source_hint: dependency.source_hint,
             source_repo,
             resolution_origin,
-            tier: None,
         };
 
         dependencies.push(dependency_record);
@@ -240,7 +240,7 @@ fn compatibility_records_from_scan(scan: &ProjectScan) -> Vec<SourceRecord> {
     records
 }
 
-fn source_repo_from_normalized_url(url: &str) -> Option<SourceRepo> {
+fn source_repo_from_normalized_url(url: &str, tier: Option<RelevanceTier>) -> Option<SourceRepo> {
     let trimmed = url.trim();
     let without_scheme = trimmed.strip_prefix("https://")?;
     let (host, tail) = without_scheme.split_once('/')?;
@@ -255,5 +255,6 @@ fn source_repo_from_normalized_url(url: &str) -> Option<SourceRepo> {
         host: host.to_string(),
         owner: owner.to_string(),
         repo: repo.to_string(),
+        tier,
     })
 }

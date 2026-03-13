@@ -248,6 +248,7 @@ fn fetch_if_present_updates_existing_repo_without_recloning() {
         host: "github.com".to_string(),
         owner: "serde-rs".to_string(),
         repo: "serde".to_string(),
+        tier: None,
     };
 
     let (runner, state) = FakeGitRunner::new();
