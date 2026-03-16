@@ -9,11 +9,11 @@ $VersionTag = $env:SORCY_VERSION
 
 if ($VersionTag) {
     Write-Host "Installing sorcy from $RepoUrl (tag: $VersionTag)..."
-    cargo install --locked --git $RepoUrl --tag $VersionTag --package sorcy
+    cargo install --locked --git $RepoUrl --tag $VersionTag sorcy
 }
 else {
     Write-Host "Installing sorcy from $RepoUrl (default branch)..."
-    cargo install --locked --git $RepoUrl --package sorcy
+    cargo install --locked --git $RepoUrl sorcy
 }
 
 Write-Host "sorcy installed. Make sure %USERPROFILE%\.cargo\bin is on PATH."
