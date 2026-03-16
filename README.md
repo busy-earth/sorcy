@@ -44,7 +44,7 @@ powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/bus
 
 Notes:
 
-- Installer uses `cargo install --git ... --package sorcy`.
+- Installer uses `cargo install --git ... sorcy`.
 - Rust/Cargo must already be installed.
 - Optional env vars:
   - `SORCY_VERSION` (install a specific git tag)
