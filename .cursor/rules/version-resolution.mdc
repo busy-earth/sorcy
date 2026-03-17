@@ -1,0 +1,14 @@
+---
+description: Resolve latest tool versions with mise before writing config
+alwaysApply: true
+---
+
+Before writing or changing any tool/runtime version in this repo, do not guess from memory.
+
+Required process:
+1. Run `scripts/resolve-tool-version.sh <tool>`.
+2. Use the returned version exactly.
+3. If the script fails, stop and report the error.
+4. Apply this rule to `mise.toml`, `rust-toolchain.toml`, Dockerfiles, CI files, and install docs.
+
+Never invent versions for: rust, cargo, node, python, go, bun, uv, pnpm, terraform, kubectl.
