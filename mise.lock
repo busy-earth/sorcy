@@ -4,13 +4,6 @@
 version = "0.13.9"
 backend = "cargo:cargo-edit"
 
-[[tools."cargo:cargo-outdated"]]
-version = "0.17.0"
-backend = "cargo:cargo-outdated"
-
-[tools."cargo:cargo-outdated".options]
-features = "vendored-openssl"
-
 [[tools.rust]]
 version = "1.94.0"
 backend = "core:rust"
