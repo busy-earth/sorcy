@@ -51,18 +51,25 @@ When adding a forge:
 
 ## Running tests
 
+Bootstrap local tools once:
+
 ```bash
-./bin/mise run test
+./bin/mise install
+```
+
+After bootstrap, use `mise` directly for routine commands:
+
+```bash
+mise run test
 ```
 
 ### Optional live registry + materialization smoke tests
 
 These tests are intentionally opt-in and are meant for bigger feature milestones.
 They hit real registries (PyPI, npm, crates.io), resolve real dependencies, and clone real repos.
-Run them inside a mise-bootstrapped environment (run `./bin/mise install` first).
 
 ```bash
-./bin/mise x -- bash -lc 'SORCY_LIVE_TESTS=1 cargo test -p sorcy-core --test live_registry_optional -- --ignored --nocapture'
+mise x -- bash -lc 'SORCY_LIVE_TESTS=1 cargo test -p sorcy-core --test live_registry_optional -- --ignored --nocapture'
 ```
 
 Notes:
@@ -73,3 +80,69 @@ Notes:
 
 `AGENTS.md` is for coding-agent environment behavior.  
 Project mission and contributor policy should live in `README.md` and `CONTRIBUTING.md`.
+
+## Contributor command reference (mise wrappers)
+
+Bootstrap local tools once:
+
+```bash
+./bin/mise install
+```
+
+After bootstrap, use `mise` directly for day-to-day contributor workflows:
+
+Build all workspace members:
+
+```bash
+mise run build
+```
+
+Run CLI against current directory:
+
+```bash
+mise x -- cargo run -p sorcy -- .
+```
+
+Pretty JSON:
+
+```bash
+mise x -- cargo run -p sorcy -- . --pretty
+```
+
+Write to file:
+
+```bash
+mise x -- cargo run -p sorcy -- . --output sorcy-sources.json --pretty
+```
+
+Materialize resolved repositories into the hidden local cache while keeping default JSON output:
+
+```bash
+mise x -- cargo run -p sorcy -- . --materialize
+```
+
+Materialize and print rich JSON (scan + cache + per-resolution clone state):
+
+```bash
+mise x -- cargo run -p sorcy -- . --materialize --materialize-rich --pretty
+```
+
+Run tests:
+
+```bash
+mise run test
+```
+
+Optional live smoke tests (opt-in, network + real repo clones):
+
+```bash
+mise x -- bash -lc 'SORCY_LIVE_TESTS=1 cargo test -p sorcy-core --test live_registry_optional -- --ignored --nocapture'
+```
+
+Local update flow (includes `self-update`) remains available:
+
+```bash
+mise run update
+```
+
+`mise run ci` remains build + test only and does not run `update` or `self-update`.

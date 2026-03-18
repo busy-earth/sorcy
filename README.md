@@ -95,61 +95,47 @@ URL normalization and retry behavior are preserved.
 
 ## Build, run, test
 
-Bootstrap local tools first:
-
-```bash
-./bin/mise install
-```
-
 Build all workspace members:
 
 ```bash
-./bin/mise run build
+cargo build --workspace
 ```
 
 Run CLI against current directory:
 
 ```bash
-./bin/mise x -- cargo run -p sorcy -- .
+cargo run -- .
 ```
 
 Pretty JSON:
 
 ```bash
-./bin/mise x -- cargo run -p sorcy -- . --pretty
+cargo run -- . --pretty
 ```
 
 Write to file:
 
 ```bash
-./bin/mise x -- cargo run -p sorcy -- . --output sorcy-sources.json --pretty
+cargo run -- . --output sorcy-sources.json --pretty
 ```
 
 Materialize resolved repositories into the hidden local cache while keeping default JSON output:
 
 ```bash
-./bin/mise x -- cargo run -p sorcy -- . --materialize
+cargo run -- . --materialize
 ```
 
 Materialize and print rich JSON (scan + cache + per-resolution clone state):
 
 ```bash
-./bin/mise x -- cargo run -p sorcy -- . --materialize --materialize-rich --pretty
+cargo run -- . --materialize --materialize-rich --pretty
 ```
 
 Run tests:
 
 ```bash
-./bin/mise run test
+cargo test --workspace
 ```
-
-Optional live smoke tests (opt-in, network + real repo clones):
-
-```bash
-./bin/mise x -- bash -lc 'SORCY_LIVE_TESTS=1 cargo test -p sorcy-core --test live_registry_optional -- --ignored --nocapture'
-```
-
-Use this after larger feature work when you want extra confidence against real registries.
 
 ## Settings precedence
 
