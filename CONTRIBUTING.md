@@ -44,7 +44,7 @@ When adding a forge:
 
 ## Installer scripts
 
-- `install.sh` and `install.ps1` provide one-command installation for MVP usage.
+- `install.sh` provides one-command installation for MVP usage.
 - Keep them simple, auditable, and shell-safe.
 - If behavior changes, update README install examples in the same PR.
 - Do not add new `rustup` or `cargo install` invocations outside of `mise.toml` for dev toolchain setup.

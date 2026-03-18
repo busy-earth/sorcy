@@ -36,16 +36,17 @@ macOS / Linux:
 curl -LsSf https://raw.githubusercontent.com/busy-earth/sorcy/main/install.sh | sh
 ```
 
-Windows (PowerShell):
+Windows:
 
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/busy-earth/sorcy/main/install.ps1 | iex"
+```bash
+cargo install --locked --git https://github.com/busy-earth/sorcy sorcy
 ```
 
 Notes:
 
 - Installer uses `cargo install --git ... sorcy`.
 - Rust/Cargo must already be installed.
+- Ensure `~/.cargo/bin` is on your `PATH` so `sorcy` is available.
 - Optional env vars:
   - `SORCY_VERSION` (install a specific git tag)
   - `SORCY_REPO_URL` (install from a fork)
@@ -93,49 +94,68 @@ What this step still does **not** do:
 
 URL normalization and retry behavior are preserved.
 
-## Build, run, test
+## Usage
 
-Build all workspace members:
+After install, run `sorcy` directly (from `~/.cargo/bin` on `PATH`).
+
+Default scan (current directory):
 
 ```bash
-cargo build --workspace
+sorcy .
 ```
 
-Run CLI against current directory:
+Pretty JSON output:
 
 ```bash
-cargo run -- .
-```
-
-Pretty JSON:
-
-```bash
-cargo run -- . --pretty
+sorcy . --pretty
 ```
 
 Write to file:
 
 ```bash
-cargo run -- . --output sorcy-sources.json --pretty
+sorcy . --output sorcy-sources.json --pretty
 ```
 
-Materialize resolved repositories into the hidden local cache while keeping default JSON output:
+Materialize resolved repos into local cache:
 
 ```bash
-cargo run -- . --materialize
+sorcy . --materialize
 ```
 
-Materialize and print rich JSON (scan + cache + per-resolution clone state):
+Materialize with rich JSON output:
 
 ```bash
-cargo run -- . --materialize --materialize-rich --pretty
+sorcy . --materialize --materialize-rich --pretty
 ```
 
-Run tests:
+Install the sorcy-rank skill (project-local):
 
 ```bash
-cargo test --workspace
+sorcy install-skill
 ```
+
+Install the sorcy-rank skill (global):
+
+```bash
+sorcy install-skill --global
+```
+
+All CLI flags (scan mode):
+
+| Flag | Description |
+| -- | -- |
+| `--output <path>` | Write output to file instead of stdout |
+| `--pretty` | Pretty-print JSON output |
+| `--materialize` | Clone resolved repos into local cache |
+| `--materialize-rich` | Rich JSON with scan + cache + clone state (requires `--materialize`) |
+| `--pypi-base-url` | Override PyPI registry URL |
+| `--npm-base-url` | Override npm registry URL |
+| `--crates-base-url` | Override [crates.io](https://crates.io) registry URL |
+| `--http-timeout-seconds` | HTTP request timeout |
+| `--http-retries` | Number of HTTP retries |
+| `--http-retry-backoff-ms` | Backoff between retries (ms) |
+| `--repo-cache-dir` | Override local clone cache directory |
+| `--repo-update-strategy` | `missing-only` (default) or `fetch-if-present` |
 
 ## Settings precedence
 
