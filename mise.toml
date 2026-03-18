@@ -1,0 +1,33 @@
+[tools]
+rust = "latest"
+"cargo:cargo-edit" = "latest"
+"cargo:cargo-outdated" = { version = "latest", features = "vendored-openssl" }
+
+[tasks.build]
+description = "Build the workspace"
+run = "cargo build --workspace"
+
+[tasks.test]
+description = "Run workspace tests"
+run = "cargo test --workspace"
+
+[tasks.ci]
+description = "Full CI flow: build then test"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+mise run build
+mise run test
+"""
+
+[tasks.update]
+description = "Bump Rust toolchain to latest stable and upgrade all crate versions"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+mise self-update || true
+mise up --bump rust
+cargo upgrade --incompatible --pinned
+cargo update
+cargo outdated || true
+"""
