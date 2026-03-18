@@ -47,20 +47,22 @@ When adding a forge:
 - `install.sh` and `install.ps1` provide one-command installation for MVP usage.
 - Keep them simple, auditable, and shell-safe.
 - If behavior changes, update README install examples in the same PR.
+- Do not add new `rustup` or `cargo install` invocations outside of `mise.toml` for dev toolchain setup.
 
 ## Running tests
 
 ```bash
-cargo test --workspace
+./bin/mise run test
 ```
 
 ### Optional live registry + materialization smoke tests
 
 These tests are intentionally opt-in and are meant for bigger feature milestones.
 They hit real registries (PyPI, npm, crates.io), resolve real dependencies, and clone real repos.
+Run them inside a mise-bootstrapped environment (run `./bin/mise install` first).
 
 ```bash
-SORCY_LIVE_TESTS=1 cargo test -p sorcy-core --test live_registry_optional -- --ignored --nocapture
+./bin/mise x -- bash -lc 'SORCY_LIVE_TESTS=1 cargo test -p sorcy-core --test live_registry_optional -- --ignored --nocapture'
 ```
 
 Notes:

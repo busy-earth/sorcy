@@ -1,7 +1,6 @@
 [tools]
 rust = "latest"
 "cargo:cargo-edit" = "latest"
-"cargo:cargo-outdated" = { version = "latest", features = "vendored-openssl" }
 
 [tasks.build]
 description = "Build the workspace"
@@ -29,5 +28,4 @@ set -euo pipefail
 ./bin/mise up --bump rust
 cargo upgrade --incompatible --pinned
 cargo update
-cargo outdated || true
 """
