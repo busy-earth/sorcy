@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# bin/mise — bootstrap shim
+set -euo pipefail
+
+MISE_BIN="${MISE_INSTALL_PATH:-$HOME/.local/bin/mise}"
+
+if ! command -v mise >/dev/null 2>&1 && [[ ! -x "$MISE_BIN" ]]; then
+  echo "==> mise not found — installing..."
+  curl -fsSL https://mise.run | sh
+fi
+
+MISE="$(command -v mise 2>/dev/null || echo "$MISE_BIN")"
+
+# Ensure first-time installs run with a modern Rust/Cargo context so cargo backend
+# tools (for example cargo-edit) don't fail on older system cargo.
+if [[ "${1:-}" == "install" ]]; then
+  exec "$MISE" x rust@latest -- "$MISE" "$@"
+fi
+
+exec "$MISE" "$@"

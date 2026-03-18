@@ -6,9 +6,11 @@ This is a Rust project (`sorcy`) that provides a small CLI for dependency source
 
 ### Environment
 
-- **Rust 1.83.0** and **Cargo 1.83.0** are available system-wide (backward-compatible with the 1.82.0 edition used by the project).
+- Rust and Cargo versions are managed by mise. Do not hardcode versions.
+- To bootstrap the environment: `./bin/mise install`
+- To run CI: `./bin/mise run ci`
+- To update all versions (toolchain + crates): `./bin/mise run update`
 - The project uses `Cargo.toml` as the dependency manifest.
-- Dependency versions are pinned where needed to stay compatible with Rust 1.82.0.
 
 ### Running / Testing
 
