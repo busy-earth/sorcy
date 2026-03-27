@@ -5,5 +5,5 @@ version = "0.13.9"
 backend = "cargo:cargo-edit"
 
 [[tools.rust]]
-version = "1.94.0"
+version = "1.94.1"
 backend = "core:rust"
